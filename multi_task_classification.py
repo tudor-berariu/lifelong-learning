@@ -350,7 +350,13 @@ def order_tasks(task_args: List[Tuple[str, int]], args: Args) -> None:
 def add_exp_params(dfr: pd.DataFrame, args: Args) -> None:
     if hasattr(args, "_experiment_parameters"):
         for p_name, p_value in args._experiment_parameters.__dict__.items():
-            dfr[p_name] = p_value
+            if isinstance(p_value, list):
+                dfr[p_name] = ",".join([str(el) for el in p_value])
+            elif isinstance(p_value, dict):
+                dfr[p_name] = ",".join([str(key) + "=" + str(el)
+                                        for (key, el) in p_value.items()])
+            else:
+                dfr[p_name] = p_value
     if hasattr(args, "title"):
         dfr['title'] = args.title
     if hasattr(args, "run_id"):
