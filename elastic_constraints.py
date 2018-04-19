@@ -1,4 +1,4 @@
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Optional, Tuple
 # from tqdm import tqdm
 
 import numpy as np
@@ -97,8 +97,12 @@ class ElasticConstraint(object):
                 used_no += output.size(0)
 
                 # Accumulate gradients
-                loss = self._loss(output, Variable(target)) * .001
-                loss.backward()
+                loss = self._loss(output, Variable(target))
+                if loss is not None:
+                    loss *= .001
+                    loss.backward()
+                else:
+                    print("WTF?")
 
             print(f"Used {used_no:d}/{len(task.train_loader.dataset):d} "
                   f"samples "
@@ -245,7 +249,7 @@ class APEC(ElasticConstraint):
         self.alpha = args.elasticity.alpha
         super(APEC, self).__init__(model, tasks, learned, args)
 
-    def _loss(self, output: Variable, target: Variable) -> Variable:
+    def _loss(self, output: Variable, target: Variable) -> Optional[Variable]:
 
         probs = F.softmax(output, dim=1)
         q_max, _ = output.max(1, keepdim=True)
