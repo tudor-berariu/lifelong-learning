@@ -22,7 +22,7 @@ from liftoff.config import read_config
 # Project imports
 from models import get_model, get_optimizer
 from tasks import ORIGINAL_SIZE, get_tasks, permute, random_permute
-from elastic_constraints import get_elastic_loss
+from elastic_constraints import elastic_loss
 
 # Types across modules
 
@@ -347,6 +347,16 @@ def order_tasks(task_args: List[Tuple[str, int]], args: Args) -> None:
         raise NotImplementedError
 
 
+def add_exp_params(dfr: pd.DataFrame, args: Args) -> None:
+    if hasattr(args, "_experiment_parameters"):
+        for p_name, p_value in args._experiment_parameters.__dict__.items():
+            dfr[p_name] = p_value
+    if hasattr(args, "title"):
+        dfr['title'] = args.title
+    if hasattr(args, "run_id"):
+        dfr['run_id'] = args.run_id
+
+
 def train_in_sequence(model: nn.Module,
                       optimizer: optim.Optimizer,
                       tasks: Tasks,
@@ -381,6 +391,9 @@ def train_in_sequence(model: nn.Module,
         task = tasks[dataset]
         i_perm = task.perms[0][p_idx]
         t_perm = None if task.perms[1] is None else task.perms[1][p_idx]
+
+        if task_no > 0:
+            elastic = elastic_loss(model, tasks, task_args[:task_no], args)
 
         while crt_epochs < args.epochs_per_task:
 
@@ -428,7 +441,7 @@ def train_in_sequence(model: nn.Module,
                 e_df = results_to_dataframe(results)
                 e_df['seen'] = seen
                 e_df['epoch'] = total_epochs_no
-                e_df['title'] = args.title
+                add_exp_params(e_df, args)
                 if eval_df is None:
                     eval_df = e_df
                 else:
@@ -436,7 +449,8 @@ def train_in_sequence(model: nn.Module,
 
                 if len(trace) % args.save_freq == 0:
                     train_df = pd.DataFrame(train_info)
-                    train_df['title'] = args.title
+                    add_exp_params(train_df, args)
+
                     train_df.to_pickle(os.path.join(
                         args.out_dir,
                         f"epoch_{total_epochs_no:d}_losses.pkl"))
@@ -449,10 +463,9 @@ def train_in_sequence(model: nn.Module,
                 if not_changed > 0 and args.stop_if_not_better == not_changed:
                     break
 
-        elastic = get_elastic_loss(model, tasks, task_args[:task_no+1], args)
-
     train_df = pd.DataFrame(train_info)
     train_df['title'] = args.title
+    add_exp_params(train_df, args)
     train_df.to_pickle(os.path.join(args.out_dir, f"losses.pkl"))
     eval_df.to_pickle(os.path.join(args.out_dir, f"results.pkl"))
     torch.save(trace, os.path.join(args.out_dir, f"trace.pkl"))

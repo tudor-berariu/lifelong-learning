@@ -1,5 +1,5 @@
 from typing import Iterable, List, Tuple
-from tqdm import tqdm
+# from tqdm import tqdm
 
 import numpy as np
 import torch
@@ -263,10 +263,10 @@ class APEC(ElasticConstraint):
         return torch.dot(cost, cost) * .01
 
 
-def get_elastic_loss(model: nn.Module,
-                     tasks: Tasks,
-                     learned: List[Tuple[str, int]],
-                     args: Args) -> ElasticConstraint:
+def elastic_loss(model: nn.Module,
+                 tasks: Tasks,
+                 learned: List[Tuple[str, int]],
+                 args: Args) -> ElasticConstraint:
     if args.elasticity.mode == "ewc":
         return ElasticConstraint(model, tasks, learned, args)
     elif args.elasticity.mode == "apec":
