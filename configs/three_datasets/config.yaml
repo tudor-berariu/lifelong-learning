@@ -1,0 +1,19 @@
+epochs_per_task: [1, 2, 5, 10]
+
+elasticity:
+  mode: ["apec", "ewc"]
+  is_signed: [True, False]
+  g_norm: [1, 2]
+  drop_misclassified: [True, False]
+  alpha: [0.5, 0.25, 0.1]
+  scale: [.0001, .001, .01, .1, 1., 10., 100., 1000., 10000.]
+
+optimizer: [Adam, RMSprop, SGD, Adadelta]
+  
+filter_out:
+  - left: mode
+    right: alpha
+    exclude: [["ewc", 0.5], ["ewc", 0.25]]
+  - left: optimizer
+    right: epochs_per_task
+    exclude: [["SGD", 1], ["SGD", 2], ["SGD", 5]]
