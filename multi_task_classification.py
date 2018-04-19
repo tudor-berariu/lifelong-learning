@@ -1,11 +1,10 @@
 from copy import deepcopy
-from typing import Tuple, Dict, List, TypeVar, NewType, NamedTuple, Union
-from argparse import Namespace
-from functools import reduce
-from operator import mul
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
 import os
 import os.path
 from termcolor import colored as clr
+#  from tqdm import tqdm
+import pandas as pd
 
 # Torch imports
 import numpy as np
@@ -13,33 +12,26 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.optim import Optimizer
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
 
 # Liftoff : Install https://github.com/tudor-berariu/liftoff
 
-from liftoff.config import read_config, value_of, namespace_to_dict
+from liftoff.config import read_config
 
+# Project imports
+from models import get_model, get_optimizer
+from tasks import ORIGINAL_SIZE, get_tasks, permute, random_permute
+from elastic_constraints import get_elastic_loss
 
-# Types used in this program
+# Types across modules
 
-Args = NewType('Args', Namespace)
-Loaders = Tuple[DataLoader, DataLoader]
-Padding = Tuple[int, int, int, int]
-LongVector = TypeVar('LongVector')
-MaybeLongVector = Union[LongVector, None]
-LongMatrix = TypeVar('LongMatrix')
-MaybeLongMatrix = Union[LongMatrix, None]
-Permutations = Tuple[LongMatrix, MaybeLongMatrix]
-DatasetTasks = NamedTuple("DatasetTasks", [("train_loader", DataLoader),
-                                           ("test_loader", DataLoader),
-                                           ("perms", Permutations)])
-Tasks = Dict[str, DatasetTasks]
-Model = NewType('Model', nn.Module)
-Accurracy = NewType('Accuracy', float)
-Loss = NewType('Loss', float)
+from my_types import Args, Tasks, Model, LongVector
+
+# Local types
+
+Accuracy = float
+Loss = float
 
 EvalResult = NamedTuple(
     "EvalResult",
@@ -47,26 +39,10 @@ EvalResult = NamedTuple(
      ("dataset_avg", Dict[str, Dict[str, float]]),
      ("global_avg", Dict[str, float])]
 )
-MaybeEvalResult = Union[EvalResult, None]
-
-# Constants
-
-DATASETS = {
-    "mnist": datasets.MNIST,
-    "fashion": datasets.FashionMNIST,
-    "cifar10": datasets.CIFAR10
-}
-
-ORIGINAL_SIZE = {
-    "mnist": torch.Size((1, 28, 28)),
-    "fashion": torch.Size((1, 28, 28)),
-    "cifar10": torch.Size((3, 32, 32))
-}
-
-CLASSES_NO = {"mnist": 10, "fashion": 10, "cifar10": 10}
 
 
 # Read command line arguments
+
 
 def process_args(args: Args) -> Args:
     args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -113,196 +89,14 @@ def process_args(args: Args) -> Args:
 
     return args
 
-# Data loaders
-
-
-def get_padding(in_size: torch.Size, out_size: torch.Size) -> Padding:
-    assert len(in_size) == len(out_size)
-    d_h, d_w = out_size[-2] - in_size[-2], out_size[-1] - in_size[-1]
-    p_h1, p_w1 = d_h // 2, d_w // 2
-    p_h2, p_w2 = d_h - p_h1, d_w - p_w1
-    return (p_h1, p_h2, p_w1, p_w2)
-
-
-def get_mean_and_std(dataset: str, args: Args) -> Tuple[float, float]:
-    original_size = ORIGINAL_SIZE[dataset]
-    in_size = args.in_size
-    padding = get_padding(original_size, in_size)
-    data = DATASETS[dataset](
-        f'./.{dataset:s}_data',
-        train=True, download=True,
-        transform=transforms.Compose([
-            transforms.Pad(padding),
-            transforms.ToTensor(),
-            transforms.Lambda(lambda t: t.expand(in_size))
-        ]))
-    if torch.is_tensor(data.train_data):
-        batch_size = data.train_data.size(0)
-    elif isinstance(data.train_data, np.ndarray):
-        batch_size = data.train_data.shape[0]
-    loader = DataLoader(data, batch_size=batch_size)
-    full_data, _ = next(iter(loader))
-    mean, std = full_data.mean(), full_data.std()
-    del loader, full_data
-
-    return mean, std
-
-
-def get_loaders(dataset: str, batch_size: int, args: Args) -> Loaders:
-    kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
-
-    original_size = ORIGINAL_SIZE[dataset]
-    in_size = args.in_size
-    padding = get_padding(original_size, in_size)
-    mean, std = get_mean_and_std(dataset, args)
-
-    train_loader = DataLoader(
-        DATASETS[dataset](f'./.{dataset:s}_data',
-                          train=True, download=True,
-                          transform=transforms.Compose([
-                              transforms.Pad(padding),
-                              transforms.ToTensor(),
-                              transforms.Lambda(lambda t: t.expand(in_size)),
-                              transforms.Normalize((mean,), (std,))
-                          ])),
-        batch_size=batch_size, shuffle=True, **kwargs)
-
-    test_dataset = DATASETS[dataset](
-        f'./.{dataset:s}_data',
-        train=False,
-        transform=transforms.Compose([
-            transforms.Pad(padding),
-            transforms.ToTensor(),
-            transforms.Lambda(lambda t: t.expand(in_size)),
-            transforms.Normalize((mean,), (std,))
-        ]))
-
-    if args.test_batch_size == 0:
-        test_batch_size = len(test_dataset)
-    else:
-        test_batch_size = args.test_batch_size
-    print(f"Test batch size for {dataset:s} will be {test_batch_size:d}.")
-
-    test_loader = DataLoader(test_dataset,
-                             batch_size=test_batch_size,
-                             shuffle=False, **kwargs)
-
-    return train_loader, test_loader
-
-
-# Create random permutations
-
-def get_permutations(p_no: int, v_size: int, cuda: bool = True) -> LongMatrix:
-    fwd_perms = torch.stack([torch.randperm(v_size) for _ in range(p_no)])
-    # idxs = torch.linspace(0, v_size - 1, v_size).long()
-    if cuda:
-        fwd_perms = fwd_perms.cuda()
-        # idxs = idxs.cuda()
-    # bwd_perms = [p.clone().zero_().index_add_(0, p, idxs) for p in fwd_perms]
-    return fwd_perms  # , bwd_perms
-
-
-def get_full_permutations(dataset: str, p_no: int, args: Args) -> Permutations:
-    in_n = reduce(mul, args.in_size, 1)
-    i_permutations = get_permutations(p_no, in_n, args.cuda)
-    c_no = CLASSES_NO[dataset]
-    if args.permute_targets:
-        o_permutations = get_permutations(p_no, c_no, args.cuda)
-    else:
-        o_permutations = None
-    return (i_permutations, o_permutations)
-
-
-def get_tasks(args: Args) -> Tasks:
-    tasks = {}
-    lengths = []
-    for task in zip(args.datasets, args.train_batch_size, args.perms_no):
-        dataset, batch_size, perms_no = task
-        train_loader, test_loader = get_loaders(dataset, batch_size, args)
-        perms = get_full_permutations(dataset, perms_no, args)
-        tasks[dataset] = DatasetTasks(train_loader, test_loader, perms)
-        lengths.append(len(train_loader.dataset))
-        print(f"{perms_no:d} tasks for {dataset:s} created.")
-    print("Datasets have lengths: ", ", ".join([str(l) for l in lengths]))
-    if args.eval_freq == 0:
-        if args.mode == "sim":
-            args.eval_freq = lengths[0]
-        else:
-            args.eval_freq = 1
-    return tasks
-
-
-# Models
-
-class MLP(nn.Module):
-
-    def __init__(self, in_size: torch.Size, use_softmax: bool = True):
-        super(MLP, self).__init__()
-        in_units = reduce(mul, in_size, 1)
-        self.fc1 = nn.Linear(in_units, 300)
-        self.fc2 = nn.Linear(300, 10)
-        self.use_softmax = use_softmax
-
-    def forward(self, *x: List[Variable]) -> Variable:
-        x = x[0]
-        batch_size = x.size(0)
-        x = x.view(batch_size, -1)
-        output = self.fc2(F.relu(self.fc1(x)))
-        if self.use_softmax:
-            return F.softmax(output, dim=-1)
-        return output
-
-    def set_softmax(self, use_softmax):
-        self.use_softmax = use_softmax
-
-
-def get_model(args: Args) -> Model:
-    return MLP(args.in_size)
-
-
-def get_optimizer(model: Model, args: Args) -> Optimizer:
-    kwargs = value_of(args, "optimizer_args", Namespace(lr=0.001))
-    kwargs = namespace_to_dict(kwargs)
-    return optim.__dict__[args.optimizer](model.parameters(), **kwargs)
-
-
-# Apply permutations
-
-def permute(data, target, i_perm: LongVector, t_perm: MaybeLongVector):
-    in_size = data.size()
-    data = data.view(in_size[0], -1).index_select(1, i_perm).view(in_size)
-    if t_perm is not None:
-        target = t_perm.index_select(0, target)
-    return data, target
-
-
-def random_permute(data, target, perms: Permutations):
-    i_perms, t_perms = perms
-    in_size = data.size()
-    in_n = reduce(mul, in_size[1:], 1)
-    batch_size, perms_no = data.size(0), i_perms.size(0)
-    p_idx = torch.LongTensor(batch_size).random_(0, perms_no)
-    if data.is_cuda:
-        p_idx = p_idx.cuda()
-    idx = i_perms.index_select(0, p_idx).unsqueeze(2)
-    data = data.view(batch_size, 1, -1)\
-        .expand(batch_size, in_n, in_n)\
-        .gather(2, idx)\
-        .view(in_size)
-    if t_perms is not None:
-        target = t_perms.index_select(0, p_idx)\
-            .gather(1, target.unsqueeze(1))\
-            .squeeze(1)
-    return data, target
-
-
 # Evaluation
 
+
 def test(model: Model, test_loader: DataLoader,
-         i_perm: LongVector, t_perm: MaybeLongVector,
-         args: Args) -> Tuple[Accurracy, Loss]:
+         i_perm: LongVector, t_perm: Optional[LongVector],
+         args: Args) -> Tuple[Accuracy, Loss]:
     model.eval()
-    model.set_softmax(use_softmax=False)
+    model.use_softmax = False
     test_loss, correct = 0, 0
     for data, target in test_loader:
         if args.cuda:
@@ -348,9 +142,10 @@ def test_all(model: Model, tasks: Tasks, args: Args) -> EvalResult:
     return EvalResult(results, dataset_avg, global_avg)
 
 
-def show_results(idx: int, results: EvalResult, best: MaybeEvalResult) -> None:
+def show_results(seen: int, results: EvalResult,
+                 best: Optional[EvalResult]) -> None:
     print(''.join("" * 79))
-    print(f"Evaluation {clr(f'after {idx:d} examples', attrs=['bold']):s}:")
+    print(f"Evaluation {clr(f'after {seen:d} examples', attrs=['bold']):s}:")
 
     for dataset, dataset_results in results.task_results.items():
 
@@ -407,7 +202,7 @@ def show_results(idx: int, results: EvalResult, best: MaybeEvalResult) -> None:
 
 
 def update_results(results: EvalResult,
-                   best: MaybeEvalResult) -> Tuple[EvalResult, bool]:
+                   best: Optional[EvalResult]) -> Tuple[EvalResult, bool]:
     from operator import lt, gt
 
     if not best:
@@ -446,6 +241,15 @@ def update_results(results: EvalResult,
     return best, changed
 
 
+def results_to_dataframe(results: EvalResult) -> pd.DataFrame:
+    return pd.concat([pd.DataFrame({
+        'task': [f"{dataset:s}-{(i+1):d}" for i in range(len(d_results["acc"]))],
+        'acc': d_results["acc"],
+        'loss': d_results["loss"]
+    }) for (dataset, d_results) in results.task_results.items()])\
+        .reset_index(drop=True)
+
+
 # Training procedures
 
 def train_simultaneously(model: nn.Module,
@@ -465,14 +269,16 @@ def train_simultaneously(model: nn.Module,
     print(f"Model will be evaluated every {eval_freq:d} training samples.")
 
     model.train()
-    model.set_softmax(use_softmax=False)
+    model.use_softmax = False
 
     train_iterators = {d: iter(dts.train_loader) for (d, dts) in tasks.items()}
     seen, next_eval = 0, eval_freq
     trace, best_results, not_changed = [], None, 0
 
     while seen < max_inputs:
-        full_data, full_target = [], []
+        inputs: List[torch.Tensor] = []
+        targets: List[torch.Tensor] = []
+
         for dataset in args.datasets:
             train_iterator = train_iterators[dataset]
             try:
@@ -484,14 +290,16 @@ def train_simultaneously(model: nn.Module,
             if args.cuda:
                 data, target = data.cuda(), target.cuda()
             data, target = random_permute(data, target, tasks[dataset].perms)
-            full_data.append(data)
-            full_target.append(target)
+            inputs.append(data)
+            targets.append(target)
 
-        if len(full_data) > 1:
-            full_data = torch.cat(full_data, dim=0)
-            full_target = torch.cat(full_target, dim=0)
+        full_data: torch.Tensor
+        full_target: torch.Tensor
+        if len(inputs) > 1:
+            full_data = torch.cat(inputs, dim=0)
+            full_target = torch.cat(targets, dim=0)
         else:
-            full_data, full_target = full_data[0], full_target[0]
+            full_data, full_target = inputs[0], targets[0]
 
         optimizer.zero_grad()
         output = model(Variable(full_data))
@@ -504,7 +312,7 @@ def train_simultaneously(model: nn.Module,
         if seen >= next_eval:
             results = test_all(model, tasks, args)
             model.train()
-            model.set_softmax(use_softmax=False)
+            model.use_softmax = False
             show_results(seen, results, best_results)
             best_results, changed = update_results(results, best_results)
             next_eval += eval_freq
@@ -524,7 +332,6 @@ def train_simultaneously(model: nn.Module,
         trace.append((seen, -1, results))
 
     torch.save(trace, os.path.join(args.out_dir, f"trace.pkl"))
-    return trace
 
 
 def order_tasks(task_args: List[Tuple[str, int]], args: Args) -> None:
@@ -543,15 +350,13 @@ def order_tasks(task_args: List[Tuple[str, int]], args: Args) -> None:
 def train_in_sequence(model: nn.Module,
                       optimizer: optim.Optimizer,
                       tasks: Tasks,
-                      args: Args)-> None:
+                      args: Args) -> None:
     print(f"Training all tasks {clr('in sequence', attrs=['bold']):s}.")
-    if args.mode == "ewc":
-        print("Using elastic weight consolidation.")
-    elif args.mode == "apc":
-        print("Using action preserving constraints")
+    if args.mode == "elastic":
+        print(f"... using {clr('elastic constraints', attrs=['bold']):s}.")
 
     model.train()
-    model.set_softmax(use_softmax=False)
+    model.use_softmax = False
 
     seen, total_epochs_no = 0, 0
     trace, best_results = [], None
@@ -564,6 +369,10 @@ def train_in_sequence(model: nn.Module,
     print("Tasks order will be: ",
           ", ".join([f"{dataset:s}-{(p_idx+1):03d}"
                      for (dataset, p_idx) in task_args]))
+    elastic: Optional[Callable[[nn.Module], Variable]] = None
+    eval_df = None
+    train_info: Dict[str, List[Any]] = {
+        'seen': [], 'epoch': [], 'ce_loss': [], 'ec_loss': []}
 
     for task_no, (dataset, p_idx) in enumerate(task_args):
         print(f"Training on task {task_no:d}: {dataset:s}-{(p_idx+1):03d}.")
@@ -575,6 +384,9 @@ def train_in_sequence(model: nn.Module,
 
         while crt_epochs < args.epochs_per_task:
 
+            ce_losses = []
+            ec_losses = []
+
             for data, target in task.train_loader:
                 if args.cuda:
                     data, target = data.cuda(), target.cuda()
@@ -583,6 +395,13 @@ def train_in_sequence(model: nn.Module,
                 optimizer.zero_grad()
                 output = model(Variable(data))
                 loss = F.cross_entropy(output, Variable(target))
+                ce_losses.append(loss.data[0])
+                if elastic is not None:
+                    elastic_penalty = args.elasticity.scale * elastic(model)
+                    ec_losses.append(elastic_penalty.data[0])
+                    if elastic_penalty.data[0] > 0:
+                        loss += elastic_penalty
+
                 loss.backward()
                 optimizer.step()
 
@@ -590,36 +409,64 @@ def train_in_sequence(model: nn.Module,
             crt_epochs += 1
             total_epochs_no += 1
 
+            train_info['seen'].append(seen)
+            train_info['epoch'].append(total_epochs_no)
+            train_info['ce_loss'].append(np.mean(ce_losses))
+            train_info['ec_loss'].append(
+                np.mean(ec_losses) if ec_losses else 0)
+
             if total_epochs_no % args.eval_freq == 0:
                 results = test_all(model, tasks, args)
                 model.train()
-                model.set_softmax(use_softmax=False)
+                model.use_softmax = False
                 show_results(seen, results, best_results)
                 best_results, changed = update_results(results, best_results)
                 not_changed = 0 if changed else (not_changed + 1)
                 if not changed:
                     print(f"No improvement for {not_changed:d} evals!!")
                 trace.append((seen, total_epochs_no, results))
+                e_df = results_to_dataframe(results)
+                e_df['seen'] = seen
+                e_df['epoch'] = total_epochs_no
+                e_df['title'] = args.title
+                if eval_df is None:
+                    eval_df = e_df
+                else:
+                    eval_df = pd.concat([eval_df, e_df]).reset_index(drop=True)
+
                 if len(trace) % args.save_freq == 0:
-                    torch.save(trace,
-                               os.path.join(args.out_dir,
-                                            f"epoch_{total_epochs_no:d}_trace.pkl"))
+                    train_df = pd.DataFrame(train_info)
+                    train_df['title'] = args.title
+                    train_df.to_pickle(os.path.join(
+                        args.out_dir,
+                        f"epoch_{total_epochs_no:d}_losses.pkl"))
+                    eval_df.to_pickle(os.path.join(
+                        args.out_dir,
+                        f"epoch_{total_epochs_no:d}_results.pkl"))
+                    torch.save(trace, os.path.join(
+                        args.out_dir,
+                        f"epoch_{total_epochs_no:d}_trace.pkl"))
                 if not_changed > 0 and args.stop_if_not_better == not_changed:
                     break
 
+        elastic = get_elastic_loss(model, tasks, task_args[:task_no+1], args)
+
+    train_df = pd.DataFrame(train_info)
+    train_df['title'] = args.title
+    train_df.to_pickle(os.path.join(args.out_dir, f"losses.pkl"))
+    eval_df.to_pickle(os.path.join(args.out_dir, f"results.pkl"))
     torch.save(trace, os.path.join(args.out_dir, f"trace.pkl"))
-    return trace
 
 
 def run(args: Args) -> None:
     args = process_args(args)
 
     # Model, optimizer, tasks
-    model = get_model(args)
+    model = get_model(args)  # type: Model
     if args.cuda:
         model.cuda()
-    optimizer = get_optimizer(model, args)
-    tasks = get_tasks(args)
+    optimizer = get_optimizer(model, args)  # type: optim.Optimizer
+    tasks = get_tasks(args)  # type: Tasks
 
     if not os.path.isdir(args.out_dir):
         os.mkdir(args.out_dir)
@@ -633,14 +480,20 @@ def run(args: Args) -> None:
 def main():
 
     # Reading args
-    args = read_config()
+    args = read_config()  # type: Args
 
-    import time
-    if not os.path.isdir('./results'):
-        os.mkdir('./results')
-    out_dir = f'./results/{str(int(time.time())):s}_{args.experiment:s}'
-    args.out_dir = out_dir
-    args.run_id = 0
+    if not hasattr(args, "out_dir"):
+        from time import time
+        if not os.path.isdir('./results'):
+            os.mkdir('./results')
+        out_dir = f'./results/{str(int(time())):s}_{args.experiment:s}'
+        os.mkdir(out_dir)
+        args.out_dir = out_dir
+    else:
+        assert os.path.isdir(args.out_dir), "Given directory does not exist"
+
+    if not hasattr(args, "run_id"):
+        args.run_id = 0
 
     run(args)
 
