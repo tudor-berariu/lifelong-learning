@@ -12,6 +12,10 @@ from torchvision import datasets, transforms
 from my_types import Args, Loaders, Permutations, DatasetTasks, Tasks,\
     LongVector, LongMatrix
 
+from liftoff.config import value_of
+from torchutils import CudaDataLoader
+
+
 Padding = Tuple[int, int, int, int]
 
 # Constants
@@ -30,6 +34,12 @@ ORIGINAL_SIZE = {
 
 CLASSES_NO = {"mnist": 10, "fashion": 10, "cifar10": 10}
 
+MEAN_STD = {
+    "mnist": {(3, 32, 32): (0.10003692801078261, 0.2752173485400458)},
+    "fashion": {(3, 32, 32): (0.21899983604159193, 0.3318113789274)},
+    "cifar10": {(3, 32, 32): (0.4733630111949825, 0.25156892869250536)}
+}
+
 
 def get_padding(in_size: torch.Size, out_size: torch.Size) -> Padding:
     assert len(in_size) == len(out_size)
@@ -40,8 +50,12 @@ def get_padding(in_size: torch.Size, out_size: torch.Size) -> Padding:
 
 
 def get_mean_and_std(dataset: str, args: Args) -> Tuple[float, float]:
-    original_size = ORIGINAL_SIZE[dataset]  # type: torch.Size
     in_size = args.in_size  # type: torch.Size
+
+    if dataset in MEAN_STD and tuple(in_size) in MEAN_STD[dataset]:
+        return MEAN_STD[dataset][tuple(in_size)]
+
+    original_size = ORIGINAL_SIZE[dataset]  # type: torch.Size
     padding = get_padding(original_size, in_size)  # type: Padding
     data = DATASETS[dataset](
         f'./.data/.{dataset:s}_data',
@@ -60,18 +74,25 @@ def get_mean_and_std(dataset: str, args: Args) -> Tuple[float, float]:
     mean, std = full_data.mean(), full_data.std()
     del loader, full_data
 
+    print(f"Mean and std for {dataset} and {tuple(in_size)} are", mean, std)
+
     return mean, std
 
 
 def get_loaders(dataset: str, batch_size: int, args: Args) -> Loaders:
-    kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
+    if args.cuda:
+        tLoader = CudaDataLoader
+        kwargs = {}
+    else:
+        tLLoader = DataLoader
+        kwargs = {'num_workers': value_of(args, "num_workers", 1)}
 
     original_size = ORIGINAL_SIZE[dataset]
     in_size = args.in_size
     padding = get_padding(original_size, in_size)
     mean, std = get_mean_and_std(dataset, args)
 
-    train_loader = DataLoader(
+    train_loader = tLoader(
         DATASETS[dataset](f'./.data/.{dataset:s}_data',
                           train=True, download=True,
                           transform=transforms.Compose([
@@ -98,9 +119,9 @@ def get_loaders(dataset: str, batch_size: int, args: Args) -> Loaders:
         test_batch_size = args.test_batch_size
     print(f"Test batch size for {dataset:s} will be {test_batch_size:d}.")
 
-    test_loader = DataLoader(test_dataset,
-                             batch_size=test_batch_size,
-                             shuffle=False, **kwargs)
+    test_loader = tLoader(test_dataset,
+                          batch_size=test_batch_size,
+                          shuffle=False, **kwargs)
 
     return train_loader, test_loader
 

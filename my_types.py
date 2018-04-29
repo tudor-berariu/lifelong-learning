@@ -1,13 +1,16 @@
-from typing import Dict, NamedTuple, NewType, Optional, Tuple, TypeVar, Union
+from typing import Dict, NamedTuple, Optional, Tuple, TypeVar, Union
 from argparse import Namespace
 from torch.utils.data import DataLoader
 from torch.nn import Module
 from torch import Tensor
 
+from torchutils import CudaDataLoader
+
 # Types used in this program
 
-Args = NewType('Args', Namespace)
-Loaders = Tuple[DataLoader, DataLoader]
+Args = Namespace
+Loader = Union[DataLoader, CudaDataLoader]
+Loaders = Tuple[Loader, Loader]
 
 LongVector = TypeVar('LongVector')
 LongMatrix = TypeVar('LongMatrix')

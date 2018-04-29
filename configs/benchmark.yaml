@@ -2,7 +2,7 @@ title: "test_multi"
 no_cuda: False
 
 datasets: ["cifar10", "fashion", "mnist"]
-perms_no: 3
+perms_no: 1
 tasks_order: ["alt", "cifar10", "fashion", "mnist"]
 up_size: []
 permute_targets: yes
@@ -18,8 +18,8 @@ elasticity:
   alpha: 0.25
   scale: 100
   g_norm: 2
-  is_signed: False
-  drop_misclassified: False
+  is_signed: True
+  drop_misclassified: True
   loss_norm: 2
   do_sample: False
 

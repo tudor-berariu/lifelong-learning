@@ -389,7 +389,7 @@ def train_in_sequence(model: nn.Module,
     eval_df = None
     train_info: Dict[str, List[Any]] = {
         'seen': [], 'epoch': [], 'ce_loss': [], 'ec_loss': []}
-
+    elastic_info: List[Dict[Tuple[str, int], int]] = []
     for task_no, (dataset, p_idx) in enumerate(task_args):
         print(f"Training on task {task_no:d}: {dataset:s}-{(p_idx+1):03d}.")
         not_changed = 0
@@ -400,6 +400,7 @@ def train_in_sequence(model: nn.Module,
 
         if task_no > 0:
             elastic = elastic_loss(model, tasks, task_args[:task_no], args)
+            elastic_info.append(elastic.used_no)
 
         while crt_epochs < args.epochs_per_task:
 
@@ -434,6 +435,9 @@ def train_in_sequence(model: nn.Module,
             train_info['ec_loss'].append(
                 np.mean(ec_losses) if ec_losses else 0)
 
+            print(f"CE loss: {train_info['ce_loss'][-1]:f}, "
+                  f"Elastic loss: {train_info['ec_loss'][-1]:f}")
+
             if total_epochs_no % args.eval_freq == 0:
                 results = test_all(model, tasks, args)
                 model.train()
@@ -459,13 +463,16 @@ def train_in_sequence(model: nn.Module,
 
                     train_df.to_pickle(os.path.join(
                         args.out_dir,
-                        f"epoch_{total_epochs_no:d}_losses.pkl"))
+                        f"epoch__{total_epochs_no:d}__losses.pkl"))
                     eval_df.to_pickle(os.path.join(
                         args.out_dir,
-                        f"epoch_{total_epochs_no:d}_results.pkl"))
+                        f"epoch__{total_epochs_no:d}__results.pkl"))
                     torch.save(trace, os.path.join(
                         args.out_dir,
-                        f"epoch_{total_epochs_no:d}_trace.pkl"))
+                        f"epoch__{total_epochs_no:d}__trace.pkl"))
+                    torch.save(elastic_info, os.path.join(
+                        args.out_dir,
+                        f"epoch__{total_epochs_no:d}__elastic_info.pkl"))
                 if not_changed > 0 and args.stop_if_not_better == not_changed:
                     break
 
@@ -475,10 +482,15 @@ def train_in_sequence(model: nn.Module,
     train_df.to_pickle(os.path.join(args.out_dir, f"losses.pkl"))
     eval_df.to_pickle(os.path.join(args.out_dir, f"results.pkl"))
     torch.save(trace, os.path.join(args.out_dir, f"trace.pkl"))
+    torch.save(elastic_info, os.path.join(args.out_dir, f"elastic_info.pkl"))
 
 
 def run(args: Args) -> None:
     args = process_args(args)
+
+    if hasattr(args, "_experiment_parameters"):
+        for param_name, param_value in args._experiment_parameters.items():
+            print(param_name, param_value)
 
     # Model, optimizer, tasks
     model = get_model(args)  # type: Model

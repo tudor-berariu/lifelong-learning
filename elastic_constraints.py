@@ -7,10 +7,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Parameter
 from torch.autograd import Variable
-from torch.utils.data import DataLoader
 
 from tasks import permute
-from my_types import Args, Tasks
+from my_types import Args, Loader, Tasks
 
 from liftoff.config import value_of
 
@@ -26,7 +25,7 @@ class ElasticConstraint(object):
                  tasks: Tasks,
                  learned: List[Tuple[str, int]],
                  args: Args):
-
+        print("Creating an elastic constraint around current parameters.")
         # Copy reference paramters
         self.p_zero = [Variable(p.data.clone()) for p in model.parameters()]
 
@@ -40,6 +39,7 @@ class ElasticConstraint(object):
 
         # Coefficients will always pe positive
         self._coefficients = None
+        self.used_no = {}
         if self.is_signed:
             self._compute_signed_coefficients(model, tasks, learned, args)
         else:
@@ -65,7 +65,11 @@ class ElasticConstraint(object):
             i_perm = task.perms[0][p_idx]
             t_perm = None if task.perms[1] is None else task.perms[1][p_idx]
             used_no = 0
-            for data, target in task.train_loader:
+            loader: Loader = task.train_loader
+            old_bs, old_shuffle = loader.batch_size, loader.shuffle
+            loader.batch_size, loader.shuffle = 0, False
+
+            for data, target in loader:
                 # Take just some samples, not all
                 # This is not the smartest way to do this
                 if self.do_sample:
@@ -78,7 +82,7 @@ class ElasticConstraint(object):
                         continue
 
                 # Perform forward step
-                if args.cuda:
+                if args.cuda and not data.is_cuda:
                     data, target = data.cuda(), target.cuda()
                 data, target = permute(data, target, i_perm, t_perm)
                 output = model(Variable(data))
@@ -94,15 +98,17 @@ class ElasticConstraint(object):
                     else:
                         continue
 
-                used_no += output.size(0)
-
                 # Accumulate gradients
-                loss = self._loss(output, Variable(target))
-                if loss is not None:
+                loss, used_in_batch = self._loss(output, Variable(target))
+                if used_in_batch > 0:
+                    used_no += used_in_batch
                     loss *= .001
                     loss.backward()
                 else:
                     print("WTF?")
+            self.used_no[(dataset, p_idx)] = used_no
+
+            loader.batch_size, loader.shuffle = old_bs, old_shuffle
 
             print(f"Used {used_no:d}/{len(task.train_loader.dataset):d} "
                   f"samples "
@@ -118,7 +124,7 @@ class ElasticConstraint(object):
                                      args: Args) -> None:
 
         model.train()  # Model must be in training mode
-        model.cpu()  # Batches of one are faster on the CPU
+        # model.cpu()  # Batches of one are faster on the CPU
 
         c_plus = [torch.zeros_like(p.data) for p in model.parameters()]
         c_minus = [torch.zeros_like(p) for p in c_plus]
@@ -127,17 +133,18 @@ class ElasticConstraint(object):
 
         for (dataset, p_idx) in learned:
             task = tasks[dataset]
-            i_perm = task.perms[0][p_idx].cpu()
+            i_perm = task.perms[0][p_idx]  # .cpu()
             if task.perms[1] is None:
                 t_perm = None
             else:
-                t_perm = task.perms[1][p_idx].cpu()
+                t_perm = task.perms[1][p_idx]  # .cpu()
 
             used_no = 0
 
-            loader = DataLoader(task.train_loader.dataset,
-                                batch_size=1,
-                                shuffle=False)
+            # TODO
+            loader: Loader = task.train_loader
+            old_bs, old_shuffle = loader.batch_size, loader.shuffle
+            loader.batch_size, loader.shuffle = 1, False
 
             for data, target in loader:
 
@@ -154,18 +161,11 @@ class ElasticConstraint(object):
                     continue
 
                 # Accumulate gradients
-                loss = self._loss(output, Variable(target))
-                if loss is None:
+                loss, batch_used_no = self._loss(output, Variable(target))
+                if batch_used_no < 1:
                     continue
                 loss = loss * .001
                 loss.backward()
-
-                def has_nans(param: Parameter) -> bool:
-                    return np.any(np.isnan(param.data.numpy()))
-
-                if any(has_nans(p) for p in model.parameters()):
-                    print("Skipped some NaNs.")
-                    continue
 
                 used_no += 1
 
@@ -186,9 +186,12 @@ class ElasticConstraint(object):
                     scale = .1 * scale
                     print(f"New scale = {scale:f}")
 
+            self.used_no[(dataset, p_idx)] = used_no
             print(f"Used {used_no:d}/{len(task.train_loader.dataset):d} "
                   f"samples {(100.0 * used_no) / len(loader.dataset):f}% "
                   f"from {dataset:s}-{(p_idx+1):03d}.")
+
+            loader.batch_size, loader.shuffle = old_bs, old_shuffle
 
         if args.cuda:
             model.cuda()
@@ -197,8 +200,8 @@ class ElasticConstraint(object):
         self._coefficients = [[Variable(c) for c in c_plus],
                               [Variable(c) for c in c_minus]]
 
-    def _loss(self, output: Variable, target: Variable) -> Variable:
-        return F.cross_entropy(output, target)
+    def _loss(self, output: Variable, target: Variable) -> Tuple[Variable, int]:
+        return F.cross_entropy(output, target), output.size(0)
 
     def __call__(self, model: nn.Module) -> float:
         losses = []  # type: List[Variable]
@@ -250,7 +253,6 @@ class APEC(ElasticConstraint):
         super(APEC, self).__init__(model, tasks, learned, args)
 
     def _loss(self, output: Variable, target: Variable) -> Optional[Variable]:
-
         probs = F.softmax(output, dim=1)
         q_max, _ = output.max(1, keepdim=True)
         cost = output - q_max.expand_as(output) + \
@@ -259,12 +261,13 @@ class APEC(ElasticConstraint):
         mask = (cost.data > 0)
         mask = mask & torch.ones_like(mask)\
                            .scatter_(1, target.data.unsqueeze(1), 0)
+
         if not mask.any():
             del probs, q_max, cost, mask
-            return None
+            return None, 0
         cost = cost[Variable(mask)]
         # for numerical stability (gradients tend to be very big)
-        return torch.dot(cost, cost) * .01
+        return torch.dot(cost, cost) * .01, (mask.sum(1) > 0).sum()
 
 
 def elastic_loss(model: nn.Module,
