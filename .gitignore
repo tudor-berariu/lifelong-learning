@@ -1,8 +1,9 @@
+nohup.out
+configs/
 results/
 *~
 \#*#
 .data/
-configs/three_datasets/three_datasets_*.yaml
 
 
 # Byte-compiled / optimized / DLL files
