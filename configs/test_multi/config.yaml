@@ -1,8 +1,0 @@
-model:
-  hidden_units: [200, 300]
-
-elasticity:
-  g_norm: [1, 2]
-  loss_norm: [1, 2]
-
-optimizer: [Adam, RMSprop]
