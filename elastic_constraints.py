@@ -9,10 +9,10 @@ from torch.nn import Parameter
 from torch.autograd import Variable
 
 from tasks import permute
-from my_types import Args, Loader, Tasks
+from my_types import Args, Tasks
 
 from liftoff.config import value_of
-
+from torchutils import InMemoryDataLoader
 
 Parameters = Iterable[Parameter]
 Variables = Iterable[Variable]
@@ -65,7 +65,7 @@ class ElasticConstraint(object):
             i_perm = task.perms[0][p_idx]
             t_perm = None if task.perms[1] is None else task.perms[1][p_idx]
             used_no = 0
-            loader: Loader = task.train_loader
+            loader: InMemoryDataLoader = task.train_loader
             old_bs, old_shuffle = loader.batch_size, loader.shuffle
             loader.batch_size, loader.shuffle = 0, False
 
@@ -124,27 +124,39 @@ class ElasticConstraint(object):
                                      args: Args) -> None:
 
         model.train()  # Model must be in training mode
-        # model.cpu()  # Batches of one are faster on the CPU
+        if args.elasticity.signed_on_cpu:
+            model.cpu()  # Batches of one are faster on the CPU
 
-        c_plus = [torch.zeros_like(p.data) for p in model.parameters()]
-        c_minus = [torch.zeros_like(p) for p in c_plus]
+            c_plus = [torch.zeros_like(p.data.cpu())
+                      for p in model.parameters()]
+            c_minus = [torch.zeros_like(p) for p in c_plus]
+        else:
+            c_plus = [torch.zeros_like(p.data) for p in model.parameters()]
+            c_minus = [torch.zeros_like(p) for p in c_plus]
 
         scale = 1
 
         for (dataset, p_idx) in learned:
             task = tasks[dataset]
             i_perm = task.perms[0][p_idx]  # .cpu()
+            if args.elasticity.signed_on_cpu:
+                i_perm = i_perm.cpu()
+
             if task.perms[1] is None:
                 t_perm = None
             else:
                 t_perm = task.perms[1][p_idx]  # .cpu()
+                if args.elasticity.signed_on_cpu:
+                    t_perm = t_perm.cpu()
 
             used_no = 0
 
-            # TODO
-            loader: Loader = task.train_loader
+            loader: InMemoryDataLoader = task.train_loader
             old_bs, old_shuffle = loader.batch_size, loader.shuffle
             loader.batch_size, loader.shuffle = 1, False
+            old_on_cuda = loader.is_cuda
+            if args.elasticity.signed_on_cpu:
+                loader.cpu()
 
             for data, target in loader:
 
@@ -190,6 +202,9 @@ class ElasticConstraint(object):
             print(f"Used {used_no:d}/{len(task.train_loader.dataset):d} "
                   f"samples {(100.0 * used_no) / len(loader.dataset):f}% "
                   f"from {dataset:s}-{(p_idx+1):03d}.")
+
+            if args.elasticity.signed_on_cpu and old_on_cuda:
+                loader.cuda()
 
             loader.batch_size, loader.shuffle = old_bs, old_shuffle
 

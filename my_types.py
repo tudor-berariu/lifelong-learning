@@ -1,29 +1,25 @@
-from typing import Dict, NamedTuple, Optional, Tuple, TypeVar, Union
+from typing import Dict, NamedTuple, Optional, Tuple, TypeVar
 from argparse import Namespace
-from torch.utils.data import DataLoader
 from torch.nn import Module
-from torch import Tensor
 
-from torchutils import CudaDataLoader
+from torchutils import InMemoryDataLoader
 
 # Types used in this program
 
 Args = Namespace
-Loader = Union[DataLoader, CudaDataLoader]
-Loaders = Tuple[Loader, Loader]
+Loaders = Tuple[InMemoryDataLoader, InMemoryDataLoader]
 
 LongVector = TypeVar('LongVector')
 LongMatrix = TypeVar('LongMatrix')
 Permutations = Tuple[LongMatrix, Optional[LongMatrix]]
-DatasetTasks = NamedTuple("DatasetTasks", [("train_loader", DataLoader),
-                                           ("test_loader", DataLoader),
-                                           ("perms", Permutations)])
+DatasetTasks = NamedTuple("DatasetTasks",
+                          [("train_loader", InMemoryDataLoader),
+                           ("test_loader", InMemoryDataLoader),
+                           ("perms", Permutations)])
 Tasks = Dict[str, DatasetTasks]
 Model = Module
 
 
-__all__ = ["Args", "Loaders",
-           "Tensor",
-           "LongVector", "LongMatrix",
+__all__ = ["Args", "Loaders", "LongVector", "LongMatrix",
            "Permutations", "DatasetTasks", "Tasks",
            "Model"]

@@ -13,11 +13,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Variable
-from torch.utils.data import DataLoader
 
 # Liftoff : Install https://github.com/tudor-berariu/liftoff
 
 from liftoff.config import read_config
+from torchutils import InMemoryDataLoader
 
 # Project imports
 from models import get_model, get_optimizer
@@ -92,15 +92,12 @@ def process_args(args: Args) -> Args:
 # Evaluation
 
 
-def test(model: Model, test_loader: DataLoader,
-         i_perm: LongVector, t_perm: Optional[LongVector],
-         args: Args) -> Tuple[Accuracy, Loss]:
+def test(model: Model, test_loader: InMemoryDataLoader,
+         i_perm: LongVector, t_perm: Optional[LongVector]) -> Tuple[Accuracy, Loss]:
     model.eval()
     model.use_softmax = False
     test_loss, correct = 0, 0
     for data, target in test_loader:
-        if args.cuda:
-            data, target = data.cuda(), target.cuda()
         data, target = permute(data, target, i_perm, t_perm)
         data, target = Variable(data, volatile=True), Variable(target)
         output = model(data)
@@ -124,7 +121,7 @@ def test_all(model: Model, tasks: Tasks, args: Args) -> EvalResult:
         for p_idx in range(task.perms[0].size(0)):
             i_perm = task.perms[0][p_idx]
             t_perm = None if task.perms[1] is None else task.perms[1][p_idx]
-            acc, loss = test(model, task.test_loader, i_perm, t_perm, args)
+            acc, loss = test(model, task.test_loader, i_perm, t_perm)
             accuracies.append(acc)
             losses.append(loss)
         results[dataset] = {"acc": accuracies, "loss": losses}
@@ -287,8 +284,6 @@ def train_simultaneously(model: nn.Module,
                 train_iterator = iter(tasks[dataset].train_loader)
                 train_iterators[dataset] = train_iterator
                 (data, target) = next(train_iterator)
-            if args.cuda:
-                data, target = data.cuda(), target.cuda()
             data, target = random_permute(data, target, tasks[dataset].perms)
             inputs.append(data)
             targets.append(target)
@@ -408,8 +403,6 @@ def train_in_sequence(model: nn.Module,
             ec_losses = []
 
             for data, target in task.train_loader:
-                if args.cuda:
-                    data, target = data.cuda(), target.cuda()
                 data, target = permute(data, target, i_perm, t_perm)
 
                 optimizer.zero_grad()

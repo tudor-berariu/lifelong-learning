@@ -22,6 +22,7 @@ elasticity:
   drop_misclassified: False
   loss_norm: 2
   do_sample: False
+  signed_on_cpu: True
 
 train_batch_size: 64
 test_batch_size: 0

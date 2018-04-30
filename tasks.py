@@ -13,7 +13,7 @@ from my_types import Args, Loaders, Permutations, DatasetTasks, Tasks,\
     LongVector, LongMatrix
 
 from liftoff.config import value_of
-from torchutils import CudaDataLoader
+from torchutils import InMemoryDataLoader
 
 
 Padding = Tuple[int, int, int, int]
@@ -80,19 +80,12 @@ def get_mean_and_std(dataset: str, args: Args) -> Tuple[float, float]:
 
 
 def get_loaders(dataset: str, batch_size: int, args: Args) -> Loaders:
-    if args.cuda:
-        tLoader = CudaDataLoader
-        kwargs = {}
-    else:
-        tLLoader = DataLoader
-        kwargs = {'num_workers': value_of(args, "num_workers", 1)}
-
     original_size = ORIGINAL_SIZE[dataset]
     in_size = args.in_size
     padding = get_padding(original_size, in_size)
     mean, std = get_mean_and_std(dataset, args)
-
-    train_loader = tLoader(
+    kwargs = {}
+    train_loader = InMemoryDataLoader(
         DATASETS[dataset](f'./.data/.{dataset:s}_data',
                           train=True, download=True,
                           transform=transforms.Compose([
@@ -101,7 +94,7 @@ def get_loaders(dataset: str, batch_size: int, args: Args) -> Loaders:
                               transforms.Lambda(lambda t: t.expand(in_size)),
                               transforms.Normalize((mean,), (std,))
                           ])),
-        batch_size=batch_size, shuffle=True, **kwargs)
+        cuda=args.cuda, batch_size=batch_size, shuffle=True, **kwargs)
 
     test_dataset = DATASETS[dataset](
         f'./.data/.{dataset:s}_data',
@@ -119,9 +112,9 @@ def get_loaders(dataset: str, batch_size: int, args: Args) -> Loaders:
         test_batch_size = args.test_batch_size
     print(f"Test batch size for {dataset:s} will be {test_batch_size:d}.")
 
-    test_loader = tLoader(test_dataset,
-                          batch_size=test_batch_size,
-                          shuffle=False, **kwargs)
+    test_loader = InMemoryDataLoader(test_dataset, cuda=True,
+                                     batch_size=test_batch_size,
+                                     shuffle=False, **kwargs)
 
     return train_loader, test_loader
 
