@@ -60,6 +60,8 @@ class ElasticConstraint(object):
         model.train()  # Model must be in train mode
         model.zero_grad()
 
+        scale = 1
+
         for (dataset, p_idx) in learned:
             task = tasks[dataset]
             i_perm = task.perms[0][p_idx]
@@ -67,7 +69,7 @@ class ElasticConstraint(object):
             used_no = 0
             loader: InMemoryDataLoader = task.train_loader
             old_bs, old_shuffle = loader.batch_size, loader.shuffle
-            loader.batch_size, loader.shuffle = 0, False
+            loader.batch_size, loader.shuffle = 10, False
 
             for data, target in loader:
                 # Take just some samples, not all
@@ -114,6 +116,10 @@ class ElasticConstraint(object):
                   f"samples "
                   f"{(100.0 * used_no) / len(task.train_loader.dataset):f}% "
                   f"from {dataset:s}-{(p_idx+1):03d}.")
+
+        print("Constraint has values between: ")
+        for p in model.parameters():
+            print(p.grad.data.min(), p.grad.data.max())
 
         self._coefficients = [[Variable(p.grad.data.abs())
                                for p in model.parameters()]]
@@ -269,6 +275,27 @@ class APEC(ElasticConstraint):
 
     def _loss(self, output: Variable, target: Variable) -> Optional[Variable]:
         probs = F.softmax(output, dim=1)
+        max_probs, indices = probs.max(1, keepdim=True)
+        assert (indices != target.unsqueeze(1)).nonzero().nelement() == 0
+        diffs = F.relu(probs - max_probs.expand_as(probs) + self.alpha)
+        if diffs.is_cuda:
+            mask = torch.cuda.ByteTensor(diffs.size())\
+                             .fill_(1)\
+                             .scatter_(1, target.data.unsqueeze(1), 0)
+        else:
+            mask = torch.cuda.ByteTensor(diffs.size())\
+                             .fill_(1)\
+                             .scatter_(1, target.data.unsqueeze(1), 0)
+        n = (mask.sum(1) > 0).sum()
+        if n > 0:
+            diffs = diffs.masked_select(Variable(mask))
+            cost = torch.dot(diffs, diffs)
+            return cost, n
+        else:
+            return None, 0
+        
+        """
+        probs = F.softmax(output, dim=1)
         q_max, _ = output.max(1, keepdim=True)
         cost = output - q_max.expand_as(output) + \
             (1 + self.alpha / probs).log()
@@ -276,14 +303,13 @@ class APEC(ElasticConstraint):
         mask = (cost.data > 0)
         mask = mask & torch.ones_like(mask)\
                            .scatter_(1, target.data.unsqueeze(1), 0)
-
         if not mask.any():
             del probs, q_max, cost, mask
             return None, 0
-        cost = cost[Variable(mask)]
+        cost = cost[Variable(mask)] * .01
         # for numerical stability (gradients tend to be very big)
         return torch.dot(cost, cost) * .01, (mask.sum(1) > 0).sum()
-
+        """
 
 def elastic_loss(model: nn.Module,
                  tasks: Tasks,
