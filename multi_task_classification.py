@@ -482,8 +482,8 @@ def run(args: Args) -> None:
     args = process_args(args)
 
     if hasattr(args, "_experiment_parameters"):
-        for param_name, param_value in args._experiment_parameters.items():
-            print(param_name, param_value)
+        for p_name, p_value in args._experiment_parameters.__dict__.items():
+            print(p_name, p_value)
 
     # Model, optimizer, tasks
     model = get_model(args)  # type: Model
