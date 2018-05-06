@@ -410,11 +410,12 @@ def train_in_sequence(model: nn.Module,
                 loss = F.cross_entropy(output, Variable(target))
                 ce_losses.append(loss.data[0])
                 if elastic is not None:
-                    elastic_penalty = args.elasticity.scale * elastic(model)
-                    ec_losses.append(elastic_penalty.data[0])
-                    if elastic_penalty.data[0] > 0:
-                        loss += elastic_penalty
-
+                    elastic_penalty = elastic(model)
+                    if elastic_penalty is not None:
+                        elastic_penalty = args.elasticity.scale * elastic_penalty
+                        ec_losses.append(elastic_penalty.data[0])
+                        if elastic_penalty.data[0] > 0:
+                            loss += elastic_penalty
                 loss.backward()
                 optimizer.step()
 

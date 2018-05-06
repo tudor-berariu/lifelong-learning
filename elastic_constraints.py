@@ -45,6 +45,10 @@ class ElasticConstraint(object):
         else:
             self._compute_unsigned_coefficients(model, tasks, learned, args)
 
+        g_order = value_of(args.elasticity, "g_order", 1)
+        if g_order == 2:
+            self._coefficients = [[c * c for c in cfs] for cfs in self._coefficients]
+
         # Normalize coeefficients
         norm = torch.cat([cff.data.view(-1) for cf_group in self.coefficients
                           for cff in cf_group])\
@@ -69,7 +73,8 @@ class ElasticConstraint(object):
             used_no = 0
             loader: InMemoryDataLoader = task.train_loader
             old_bs, old_shuffle = loader.batch_size, loader.shuffle
-            loader.batch_size, loader.shuffle = 10, False
+            batch_size = value_of(args.elasticity, "batch_size", 10000)
+            loader.batch_size, loader.shuffle = batch_size, False
 
             for data, target in loader:
                 # Take just some samples, not all
@@ -131,8 +136,7 @@ class ElasticConstraint(object):
 
         model.train()  # Model must be in training mode
         if args.elasticity.signed_on_cpu:
-            model.cpu()  # Batches of one are faster on the CPU
-
+            model.cpu()
             c_plus = [torch.zeros_like(p.data.cpu())
                       for p in model.parameters()]
             c_minus = [torch.zeros_like(p) for p in c_plus]
@@ -140,7 +144,7 @@ class ElasticConstraint(object):
             c_plus = [torch.zeros_like(p.data) for p in model.parameters()]
             c_minus = [torch.zeros_like(p) for p in c_plus]
 
-        scale = 1
+        scale = 1.0
 
         for (dataset, p_idx) in learned:
             task = tasks[dataset]
@@ -159,50 +163,55 @@ class ElasticConstraint(object):
 
             loader: InMemoryDataLoader = task.train_loader
             old_bs, old_shuffle = loader.batch_size, loader.shuffle
-            loader.batch_size, loader.shuffle = 1, False
+            batch_size = value_of(args.elasticity, "batch_size", 10000)
+            loader.batch_size, loader.shuffle = batch_size, False
             old_on_cuda = loader.is_cuda
             if args.elasticity.signed_on_cpu:
                 loader.cpu()
 
-            for data, target in loader:
+            for full_data, full_target in loader:
+                full_data, full_target = permute(full_data, full_target, i_perm, t_perm)
+                for idx in range(full_data.size(0)):
 
-                if self.do_sample and np.random.sample() > self.do_sample:
-                    continue
+                    if self.do_sample and np.random.sample() > self.do_sample:
+                        continue
 
-                model.zero_grad()
-                data, target = permute(data, target, i_perm, t_perm)
-                output = model(Variable(data))
+                    data, target = full_data[idx:(idx + 1)], full_target[idx:(idx+1)]
 
-                # Keep all or just the correctly classified ones
-                predicted_class = output.max(1, keepdim=False)[1][0]
-                if self.drop_wrong and (predicted_class.data[0] != target[0]):
-                    continue
+                    model.zero_grad()
 
-                # Accumulate gradients
-                loss, batch_used_no = self._loss(output, Variable(target))
-                if batch_used_no < 1:
-                    continue
-                loss = loss * .001
-                loss.backward()
+                    output = model(Variable(data))
 
-                used_no += 1
+                    # Keep all or just the correctly classified ones
+                    predicted_class = output.max(1, keepdim=False)[1][0]
+                    if self.drop_wrong and (predicted_class.data[0] != target[0]):
+                        continue
 
-                for t_i in zip(model.parameters(), c_plus, c_minus):
-                    (p_i, cp_i, cm_i) = t_i
-                    cp_i += (p_i.grad.data *
-                             (p_i.grad.data > 0).float() * scale)
-                    cm_i -= (p_i.grad.data *
-                             (p_i.grad.data < 0).float() * scale)
+                    # Accumulate gradients
+                    loss, batch_used_no = self._loss(output, Variable(target))
+                    if batch_used_no < 1:
+                        continue
+                    loss = loss * .001
+                    loss.backward()
 
-                max_abs = max(max(p_i.abs().max() for p_i in c_plus),
-                              max(p_i.abs().max() for p_i in c_plus))
-                if max_abs > 10**3:
-                    for p_i in c_plus:
-                        p_i.div_(10)
-                    for m_i in c_minus:
-                        m_i.div_(10)
-                    scale = .1 * scale
-                    print(f"New scale = {scale:f}")
+                    used_no += 1
+
+                    for t_i in zip(model.parameters(), c_plus, c_minus):
+                        (p_i, cp_i, cm_i) = t_i
+                        cp_i += (p_i.grad.data *
+                                 (p_i.grad.data > 0).float() * scale)
+                        cm_i -= (p_i.grad.data *
+                                 (p_i.grad.data < 0).float() * scale)
+
+                    max_abs = max(max(p_i.abs().max() for p_i in c_plus),
+                                  max(p_i.abs().max() for p_i in c_plus))
+                    if max_abs > 10**3:
+                        for p_i in c_plus:
+                            p_i.div_(10)
+                        for m_i in c_minus:
+                            m_i.div_(10)
+                        scale = .1 * scale
+                        print(f"New scale = {scale:f}")
 
             self.used_no[(dataset, p_idx)] = used_no
             print(f"Used {used_no:d}/{len(task.train_loader.dataset):d} "
@@ -224,9 +233,10 @@ class ElasticConstraint(object):
     def _loss(self, output: Variable, target: Variable) -> Tuple[Variable, int]:
         return F.cross_entropy(output, target), output.size(0)
 
-    def __call__(self, model: nn.Module) -> float:
+    def __call__(self, model: nn.Module) -> Variable:
         losses = []  # type: List[Variable]
         is_signed = self.is_signed
+
         for _t in zip(model.parameters(), self.ref_params, *self.coefficients):
             if is_signed:
                 p_t, p_0, c_p, c_m = _t
@@ -234,10 +244,8 @@ class ElasticConstraint(object):
                 p_t, p_0, c_t = _t
 
             diff = p_t - p_0  # type: Variable
-
             if is_signed:
-                sgn = diff.sign()
-                sgn_p, sgn_m = (sgn == 1).detach(), (sgn == -1).detach()
+                sgn_p, sgn_m = (diff > 0).detach(), (diff < 0).detach()
 
             if self.loss_norm == 2:
                 diff = diff * diff
@@ -245,13 +253,14 @@ class ElasticConstraint(object):
                 diff = diff.abs()
 
             if is_signed:
-                diff_p, diff_m = diff[sgn_p], diff[sgn_m]
-                c_p, c_m = c_p[sgn_p], c_m[sgn_m]
-                losses.append(torch.dot(c_p, diff_p) + torch.dot(c_m, diff_m))
+                if sgn_p.data.any():
+                    losses.append(torch.dot(c_p[sgn_p], diff[sgn_p]))
+                if sgn_m.data.any():
+                    losses.append(torch.dot(c_m[sgn_m], diff[sgn_m]))
             else:
                 losses.append(torch.dot(c_t, diff))
 
-        return sum(losses)
+        return sum(losses) if losses else None
 
     @property
     def ref_params(self) -> Variables:
