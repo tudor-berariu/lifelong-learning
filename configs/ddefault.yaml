@@ -1,0 +1,33 @@
+title: "test_multi"
+no_cuda: False
+
+datasets: ["cifar10", "fashion", "mnist"]
+perms_no: 1
+tasks_order: ["alt", "cifar10", "fashion", "mnist"]
+up_size: []
+permute_targets: no
+mode: sim
+epochs_per_task: 5
+stop_if_not_better: 5
+
+model:
+  hidden_units: 100
+
+elasticity:
+  mode: ewc
+  alpha: 0.25
+  scale: 100
+  g_norm: 2
+  is_signed: False
+  drop_misclassified: False
+  loss_norm: 2
+  do_sample: False
+  signed_on_cpu: True
+
+train_batch_size: 64
+test_batch_size: 0
+optimizer: Adam
+optimizer_args: { lr: 0.001 }
+
+eval_freq: 1
+save_freq: 1

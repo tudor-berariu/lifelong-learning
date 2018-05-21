@@ -1,6 +1,6 @@
 nohup.out
-configs/
 results/
+configs/default.yaml
 *~
 \#*#
 .data/
