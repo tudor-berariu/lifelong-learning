@@ -12,7 +12,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.autograd import Variable
 
 # Liftoff : Install https://github.com/tudor-berariu/liftoff
 
@@ -97,18 +96,19 @@ def test(model: Model, test_loader: InMemoryDataLoader,
     model.eval()
     model.use_softmax = False
     test_loss, correct = 0, 0
-    for data, target in test_loader:
-        data, target = permute(data, target, i_perm, t_perm)
-        data, target = Variable(data, volatile=True), Variable(target)
-        output = model(data)
-        test_loss += F.cross_entropy(output, target,
-                                     size_average=False).data[0]
-        pred = output.data.max(1, keepdim=True)[1]
-        correct += pred.eq(target.data.view_as(pred)).long().cpu().sum()
+    with torch.no_grad():
+        for data, target in test_loader:
+            data, target = permute(data, target, i_perm, t_perm)
+            output = model(data)
+            test_loss += F.cross_entropy(output, target,
+                                         size_average=False).item()
+            pred = output.data.max(1, keepdim=True)[1]
+            correct += pred.eq(target.data.view_as(pred)
+                               ).long().cpu().sum().item()
     model.train()
     test_loss /= len(test_loader.dataset)
     test_acc = 100. * correct / len(test_loader.dataset)
-    return test_acc.item(), test_loss.item()
+    return test_acc, test_loss
 
 
 def test_all(model: Model, tasks: Tasks, args: Args) -> EvalResult:
@@ -296,8 +296,8 @@ def train_simultaneously(model: nn.Module,
             full_data, full_target = inputs[0], targets[0]
 
         optimizer.zero_grad()
-        output = model(Variable(full_data))
-        loss = F.cross_entropy(output, Variable(full_target))
+        output = full_data
+        loss = F.cross_entropy(output, full_target)
         loss.backward()
         optimizer.step()
 
@@ -379,7 +379,7 @@ def train_in_sequence(model: nn.Module,
     print("Tasks order will be: ",
           ", ".join([f"{dataset:s}-{(p_idx+1):03d}"
                      for (dataset, p_idx) in task_args]))
-    elastic: Optional[Callable[[nn.Module], Variable]] = None
+    elastic: Optional[Callable[[nn.Module], torch.Tensor]] = None
     eval_df = None
     train_info: Dict[str, List[Any]] = {
         'seen': [], 'epoch': [], 'ce_loss': [], 'ec_loss': []}
@@ -405,9 +405,9 @@ def train_in_sequence(model: nn.Module,
                 data, target = permute(data, target, i_perm, t_perm)
 
                 optimizer.zero_grad()
-                output = model(Variable(data))
-                loss = F.cross_entropy(output, Variable(target))
-                ce_losses.append(loss.data[0])
+                output = model(data)
+                loss = F.cross_entropy(output, target)
+                ce_losses.append(loss.item())
                 if elastic is not None:
                     elastic_penalty = elastic(model)
                     if elastic_penalty is not None:
