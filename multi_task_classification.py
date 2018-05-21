@@ -108,8 +108,7 @@ def test(model: Model, test_loader: InMemoryDataLoader,
     model.train()
     test_loss /= len(test_loader.dataset)
     test_acc = 100. * correct / len(test_loader.dataset)
-
-    return test_acc, test_loss
+    return test_acc.item(), test_loss.item()
 
 
 def test_all(model: Model, tasks: Tasks, args: Args) -> EvalResult:
@@ -393,7 +392,7 @@ def train_in_sequence(model: nn.Module,
         i_perm = task.perms[0][p_idx]
         t_perm = None if task.perms[1] is None else task.perms[1][p_idx]
 
-        if task_no > 0:
+        if task_no > 0 and args.mode == "elastic":
             elastic = elastic_loss(model, tasks, task_args[:task_no], args)
             elastic_info.append(elastic.used_no)
 
@@ -480,6 +479,8 @@ def train_in_sequence(model: nn.Module,
 
 
 def run(args: Args) -> None:
+
+    print(torch.__version__)
     args = process_args(args)
 
     if hasattr(args, "_experiment_parameters"):
