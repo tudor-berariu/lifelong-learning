@@ -7,7 +7,7 @@ from functools import reduce
 import torch
 from torch import Tensor
 
-from datasets import CLASSES_NO, get_datasets, InMemoryDataSet
+from datasets import CLASSES_NO, InMemoryDataSet, DataSetFactory
 
 Args = NewType("Args", Namespace)
 Batch = Tuple[Tensor, Tensor]
@@ -114,7 +114,6 @@ class MultiTask(object):
         self.drop_last = False
 
         kwargs = {
-            "in_size": in_size,
             "reset_targets": reset_targets,
             "validation": validation,
             "device": device
@@ -123,6 +122,8 @@ class MultiTask(object):
 
         self._tasks = []
         self._out_size = []
+
+        factory = DataSetFactory(datasets, in_size)
 
         for dataset_name in datasets:
             classes_no = CLASSES_NO[dataset_name]  # type: int
@@ -136,7 +137,8 @@ class MultiTask(object):
 
                     kwargs["classes"] = classes
                     cls_name = ",".join([str(cls) for cls in classes])
-                    trn_d, vld_d, tst_d = get_datasets(dataset_name, **kwargs)
+                    trn_d, vld_d, tst_d = factory.get_datasets(
+                        dataset_name, **kwargs)
                     if perms_no > 1:
                         for p_idx in range(perms_no):
                             in_perm = torch.randperm(in_n).to(device)
@@ -156,7 +158,8 @@ class MultiTask(object):
                         self._out_size.append(len(classes))
             else:
                 kwargs["classes"] = None
-                trn_d, vld_d, tst_d = get_datasets(dataset_name, **kwargs)
+                trn_d, vld_d, tst_d = factory.get_datasets(
+                    dataset_name, **kwargs)
                 if perms_no > 1:
                     for p_idx in range(perms_no):
                         in_perm = torch.randperm(in_n).to(device)
@@ -239,6 +242,7 @@ def test_split():
     )
     mt = MultiTask(args, torch.device("cuda:0"))
     for train_loader, valid_loader in mt.train_tasks():
+        print(train_loader.name)
         for x, y in train_loader:
             print("new_batch")
         for x, y in valid_loader:
@@ -263,7 +267,7 @@ def test_perms():
     )
     mt = MultiTask(args, torch.device("cuda:0"))
     for train_loader, valid_loader in mt.train_tasks():
-        print(mt.name)
+        print(train_loader.name)
         for x, y in train_loader:
             print("new_batch")
         for x, y in valid_loader:
