@@ -227,7 +227,7 @@ class MultiTask(object):
 def test_split():
     args = Namespace(
         tasks=Namespace(
-            datasets=["fashion", "mnist"],
+            datasets=["fake"],
             in_size=[3, 32, 32],
             reset_targets=False,
             validation=.8,
@@ -252,7 +252,7 @@ def test_split():
 def test_perms():
     args = Namespace(
         tasks=Namespace(
-            datasets=["fashion", "mnist"],
+            datasets=["fake"],
             in_size=[3, 32, 32],
             reset_targets=False,
             validation=.8,

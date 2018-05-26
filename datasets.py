@@ -12,7 +12,8 @@ from multiprocessing.pool import ThreadPool
 ORIGINAL_SIZE = {
     "mnist": torch.Size((1, 28, 28)),
     "fashion": torch.Size((1, 28, 28)),
-    "cifar10": torch.Size((3, 32, 32))
+    "cifar10": torch.Size((3, 32, 32)),
+    "fake":  torch.Size((3, 32, 32)),
 }
 
 MEAN_STD = {
@@ -21,7 +22,7 @@ MEAN_STD = {
     "cifar10": {(3, 32, 32): (0.4733630111949825, 0.25156892869250536)}
 }
 
-CLASSES_NO = {"mnist": 10, "fashion": 10, "cifar10": 10}
+CLASSES_NO = {"mnist": 10, "fashion": 10, "cifar10": 10, "fake": 10}
 
 DATASETS = {
     "mnist": datasets.MNIST,
@@ -113,6 +114,14 @@ def load_data_async(dataset_name: str,
 
     original_size = ORIGINAL_SIZE[dataset_name]
     in_size = in_size if in_size is not None else original_size
+
+    if dataset_name == "fake":
+        return torch.randn(20000, *in_size), \
+            torch.LongTensor(20000).random_(10), \
+            torch.randn(2000, *in_size), \
+            torch.LongTensor(2000).random_(10), \
+
+
     padding = get_padding(original_size, in_size)
     mean, std = get_mean_and_std(dataset_name, in_size)
 
