@@ -296,7 +296,7 @@ def train_simultaneously(model: nn.Module,
             full_data, full_target = inputs[0], targets[0]
 
         optimizer.zero_grad()
-        output = full_data
+        output = model(full_data)
         loss = F.cross_entropy(output, full_target)
         loss.backward()
         optimizer.step()

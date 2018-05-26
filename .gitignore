@@ -1,6 +1,7 @@
 nohup.out
 results/
 configs/default.yaml
+.idea
 *~
 \#*#
 .data/
