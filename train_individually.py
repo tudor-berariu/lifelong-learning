@@ -7,12 +7,12 @@ from termcolor import colored as clr
 
 # Project imports
 from my_types import Args, Tasks, Model, LongVector, DatasetTasks
-from multi_task import MultiTask, DataLoader
+from multi_task import MultiTask, TaskDataLoader
 from utils import AverageMeter, accuracy
 from reporting import Accuracy, Loss, show_results, update_results, Reporting
 
 
-def train(train_loader: DataLoader, model: nn.Module,
+def train(train_loader: TaskDataLoader, model: nn.Module,
           optimizer: torch.optim.Optimizer, epoch: int, report_freq: float = 0.3)-> Tuple[int, int]:
 
     losses = AverageMeter()
@@ -43,7 +43,7 @@ def train(train_loader: DataLoader, model: nn.Module,
     return losses.avg, correct_cnt/seen
 
 
-def validate(val_loader: DataLoader, model: nn.Module, report_freq: float = 0.1):
+def validate(val_loader: TaskDataLoader, model: nn.Module, report_freq: float = 0.1):
     losses = AverageMeter()
     acc = AverageMeter()
     correct_cnt = 0
@@ -77,7 +77,7 @@ def train_individually(model_class: Type,
 
     print(f"Training {clr('individually', attrs=['bold']):s} on all tasks.")
 
-    epochs_per_task = args.epochs_per_task
+    epochs_per_task = args.train.epochs_per_task
     model_params = args.model
     batch_report_freq = args.batch_report_freq
 
@@ -94,7 +94,7 @@ def train_individually(model_class: Type,
 
     for task_idx, data_loaders in enumerate(train_tasks):
         train_loader, validate_loader = data_loaders
-        dataset_name = data_loaders.dataset_name
+        dataset_name = train_loader.dataset_name
 
         print(f"Training on task {task_no:d}: {data_loader.dataset_name:s}.")
 

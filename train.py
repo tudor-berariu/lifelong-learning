@@ -4,6 +4,7 @@ import torch
 import torch.optim as optim
 import torch.multiprocessing as mp
 from typing import Type, Callable, Tuple
+from shutil import rmtree
 
 from liftoff.config import value_of, namespace_to_dict
 from liftoff.config import read_config
@@ -32,12 +33,13 @@ def run(args: Args, multitask: MultiTask = None) -> None:
 
     # Model class, optimizer, tasks
     if multitask is None:
-        multitask = MultiTask(args.tasks)  # type: MultiTask
-    model_class = get_model(args.model.name)  # type: Type
-    optimizer, optim_args = get_optimizer(args)
+        multitask = MultiTask(args)  # type: MultiTask
 
-    def get_optim(model):
-        optimizer(model, **optim_args)
+    model_class = get_model(args.model.name)  # type: Type
+    optimizer, optim_args = get_optimizer(args.train)
+
+    def get_optim(model) -> optim.Optimizer:
+        return optimizer(model, **optim_args)
 
     if not os.path.isdir(args.out_dir):
         os.mkdir(args.out_dir)
@@ -50,7 +52,7 @@ def run(args: Args, multitask: MultiTask = None) -> None:
         train_individually(model_class, get_optim, multitask, args)
 
 
-def main(args):
+def main(args: Args):
 
     # Reading args
     if args is None:
@@ -75,24 +77,34 @@ def main(args):
         run(args)
     else:
         # Keep multitask class
-
-        multitask = MultiTask(args.tasks)  # type: MultiTask
+        multitask = MultiTask(args)  # type: MultiTask
 
         while True:
-            args = read_config()  # type: Args
+            # TODO Read again the config
+            # args = read_config()  # type: Args
+
             os.system('clear')
 
             try:
                 run(args, multitask=multitask)
-            except KeyboardInterrupt:
+            except Exception as e:
                 os.system('clear')
-                print("Caught KeyboardInterrupt, worker terminated")
+                print(e)
+
+                print("Caught Error, worker terminated")
             finally:
                 pass
 
             input("Press Enter to restart... ( ! Out directory will be reset ! )")
-            os.rmdir(args.out_dir)
+            rmtree(args.out_dir)
             os.mkdir(args.out_dir)
+
+            import sys
+            if globals().has_key('init_modules'):
+                for m in [x for x in sys.modules.keys() if x not in init_modules]:
+                    del (sys.modules[m])
+            else:
+                init_modules = sys.modules.keys()
 
 
 if __name__ == "__main__":

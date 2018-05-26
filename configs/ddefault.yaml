@@ -2,12 +2,13 @@ title: "test_multi"
 no_cuda: False
 
 task:
-  datasets: ["cifar10", "fashion", "mnist"]
-  perms_no: 1
-  tasks_order: ["alt", "cifar10", "fashion", "mnist"]
-  up_size: []
+  datasets: ["fashion", "mnist"],
+  in_size: [3, 32, 32]
+  reset_targets: False
+  validation: .8
+  split: False
+  perms_no: 3
   permute_targets: no
-  mode: sim
 
 model:
   name: mlp
@@ -24,12 +25,15 @@ elasticity:
   do_sample: False
   signed_on_cpu: True
 
-epochs_per_task: 5
-stop_if_not_better: 5
-train_batch_size: 64
-test_batch_size: 0
-optimizer: Adam
-optimizer_args: { lr: 0.001 }
+train:
+  batch_size: 6000
+  shuffle: True
+  epochs_per_task: 5
+  stop_if_not_better: 5
+  test_batch_size: 0
+
+  optimizer: Adam
+  optimizer_args: { lr: 0.001 }
 
 eval_freq: 1
 save_freq: 1

@@ -8,8 +8,8 @@ import torch
 from torch import Tensor
 
 from datasets import CLASSES_NO, get_datasets, InMemoryDataSet
+from my_types import Args
 
-Args = NewType("Args", Namespace)
 Batch = Tuple[Tensor, Tensor]
 
 
@@ -98,7 +98,7 @@ Task = NamedTuple("Task",
 
 class MultiTask(object):
 
-    def __init__(self, args: Namespace,
+    def __init__(self, args: Args,
                  device: torch.device = torch.device("cpu")) -> None:
 
         datasets = args.tasks.datasets  # type: List[str]
