@@ -19,6 +19,8 @@ MEAN_STD = {
     "cifar10": {(3, 32, 32): (0.4733630111949825, 0.25156892869250536)}
 }
 
+CLASSES_NO = {"mnist": 10, "fashion": 10, "cifar10": 10}
+
 DATASETS = {
     "mnist": datasets.MNIST,
     "fashion": datasets.FashionMNIST,
@@ -39,7 +41,7 @@ class InMemoryDataSet(object):
         del loader
 
         if cut:
-            if not 0 <= cut[0] < cut[1] < 1:
+            if not 0 <= cut[0] < cut[1] <= 1:
                 raise ValueError
             length = data.size(0)
             start = round(length * cut[0])
@@ -61,7 +63,7 @@ class InMemoryDataSet(object):
     def to_(self, device: torch.device) -> None:
         self.data, self.target = self.data.to(device), self.target.to(device)
 
-    def __length__(self) -> int:
+    def __len__(self) -> int:
         return self.data.size(0)
 
 
@@ -108,17 +110,18 @@ def get_mean_and_std(dataset_name: str,
     return mean, std
 
 
-Datasets = Tuple[InMemoryDataSet, InMemoryDataSet]
+Datasets = Tuple[InMemoryDataSet, Optional[InMemoryDataSet], InMemoryDataSet]
 
 
 def get_datasets(dataset_name: str,
-                 in_size: torch.Size,
+                 in_size: Optional[torch.Size] = None,
                  classes: Optional[List[int]] = None,
-                 validation: Optional[float] = .1,
                  reset_targets: bool = False,
+                 validation: Optional[float] = .1,
                  device: torch.device = torch.device("cpu")) -> Datasets:
 
     original_size = ORIGINAL_SIZE[dataset_name]
+    in_size = in_size if in_size is not None else original_size
     padding = get_padding(original_size, in_size)
     mean, std = get_mean_and_std(dataset_name, in_size)
 
@@ -142,9 +145,6 @@ def get_datasets(dataset_name: str,
             transforms.Normalize((mean,), (std,))
         ]))
 
-    train_data.to_(device)
-    test_data.to_(device)
-
     kwargs = {"classes": classes, "reset_targets": reset_targets}
 
     if validation:
@@ -162,5 +162,9 @@ def get_datasets(dataset_name: str,
         valid_set = None
 
     test_set = InMemoryDataSet(test_data, **kwargs)
+
+    for data_set in [train_set, valid_set, test_set]:
+        if data_set is not None:
+            data_set.to_(device)
 
     return train_set, valid_set, test_set
