@@ -2,101 +2,59 @@ import os
 from argparse import Namespace
 import torch
 import torch.optim as optim
-from torch.optim import Optimizer
-from typing import Type, Callable
+import torch.multiprocessing as mp
+from typing import Type, Callable, Tuple
 
 from liftoff.config import value_of, namespace_to_dict
 from liftoff.config import read_config
 
 from models import get_model
 from my_types import Args, Tasks, Model, LongVector, DatasetTasks
-from train_indiviually import train_individually
+from train_individually import train_individually
 from train_sequentially import train_sequentially
 from train_simultaneously import train_simultaneously
-from tasks import ORIGINAL_SIZE, get_tasks, permute, random_permute
+from tasks import ORIGINAL_SIZE
+from multi_task import MultiTask
 
 
-def process_args(args: Args) -> Args:
-    """Read command line arguments"""
-    args.cuda = not args.no_cuda and torch.cuda.is_available()
-
-    if isinstance(args.perms_no, int):
-        args.perms_no = [args.perms_no for d in args.datasets]
-    elif isinstance(args.perms_no, list) and len(args.perms_no) == 1:
-        args.perms_no = args.perms_no * len(args.datasets)
-    else:
-        assert len(args.perms_no) == len(args.datasets), \
-            "You must specify the number of permutations for each dataset."
-
-    args.tasks_no = sum(args.perms_no)
-
-    # Three combinations are supported for now:
-    # - a single dataset with any number of permutations
-    # - several datasets with the same number of permutations
-    # - datasets with different # of permutations, but in this case
-    #   the batch size must be a multiple of the total number of tasks
-
-    d_no = len(args.datasets)
-    batch_size, perms_no = args.train_batch_size, args.perms_no
-
-    if args.mode != "sim":
-        args.train_batch_size = [batch_size] * d_no
-    elif d_no == 1:
-        args.train_batch_size = [batch_size]
-    elif len(set(perms_no)) == 1:
-        args.train_batch_size = [batch_size // d_no] * d_no
-    else:
-        scale = batch_size / sum(perms_no)
-        args.train_batch_size = [round(p_no * scale) for p_no in perms_no]
-
-    if args.mode == "sim":
-        print(f"Real batch_size will be {sum(args.train_batch_size):d}.")
-
-    sizes = [ORIGINAL_SIZE[d] for d in args.datasets]
-    in_sz = torch.Size([max([s[dim] for s in sizes]) for dim in range(3)])
-    if args.up_size:
-        assert len(args.up_size) == 3, "Please provide a valid volume size."
-        in_sz = torch.Size([max(*p) for p in zip(in_sz, args.up_size)])
-    args.in_size = in_sz
-    print("Input size will be: ", in_sz)
-
-    return args
-
-
-def get_optimizer(model: Model, args: Args) -> Optimizer:
+def get_optimizer(args: Args) -> Tuple[Type, dict]:
     kwargs = value_of(args, "optimizer_args", Namespace(lr=0.001))
     kwargs = namespace_to_dict(kwargs)
-    return optim.__dict__[args.optimizer](model.parameters(), **kwargs)
+    return optim.__dict__[args.optimizer], kwargs
 
 
-def run(args: Args) -> None:
+def run(args: Args, multitask: MultiTask = None) -> None:
     print(torch.__version__)
-    args = process_args(args)
 
     if hasattr(args, "_experiment_parameters"):
         for p_name, p_value in args._experiment_parameters.__dict__.items():
             print(p_name, p_value)
 
     # Model class, optimizer, tasks
-    model_class = get_model(args)  # type: Model
-    get_optim = lambda model: get_optimizer(model, args)  # type: Callable
-    tasks = None  # type: Tasks
+    if multitask is None:
+        multitask = MultiTask(args.tasks)  # type: MultiTask
+    model_class = get_model(args.model.name)  # type: Type
+    optimizer, optim_args = get_optimizer(args)
+
+    def get_optim(model):
+        optimizer(model, **optim_args)
 
     if not os.path.isdir(args.out_dir):
         os.mkdir(args.out_dir)
 
     if args.mode == "sim":
-        train_simultaneously(model_class, get_optim, tasks, args)
+        train_simultaneously(model_class, get_optim, multitask, args)
     elif args.mode == "seq":
-        train_sequentially(model_class, get_optim, tasks, args)
+        train_sequentially(model_class, get_optim, multitask, args)
     elif args.mode == "ind":
-        train_individually(model_class, get_optim, tasks, args)
+        train_individually(model_class, get_optim, multitask, args)
 
 
-def main():
+def main(args):
 
     # Reading args
-    args = read_config()  # type: Args
+    if args is None:
+        args = read_config()  # type: Args
 
     if not hasattr(args, "out_dir"):
         from time import time
@@ -111,8 +69,31 @@ def main():
     if not hasattr(args, "run_id"):
         args.run_id = 0
 
-    run(args)
+    keep_alive = args.keep_alive
+
+    if not keep_alive:
+        run(args)
+    else:
+        # Keep multitask class
+
+        multitask = MultiTask(args.tasks)  # type: MultiTask
+
+        while True:
+            args = read_config()  # type: Args
+            os.system('clear')
+
+            try:
+                run(args, multitask=multitask)
+            except KeyboardInterrupt:
+                os.system('clear')
+                print("Caught KeyboardInterrupt, worker terminated")
+            finally:
+                pass
+
+            input("Press Enter to restart... ( ! Out directory will be reset ! )")
+            os.rmdir(args.out_dir)
+            os.mkdir(args.out_dir)
 
 
 if __name__ == "__main__":
-    main()
+    main(None)
