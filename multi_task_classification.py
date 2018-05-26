@@ -19,13 +19,13 @@ from liftoff.config import read_config
 from torchutils import InMemoryDataLoader
 
 # Project imports
-from models import get_model, get_optimizer
+from model import get_model, get_optimizer
 from tasks import ORIGINAL_SIZE, get_tasks, permute, random_permute
 from elastic_constraints import elastic_loss
 
 # Types across modules
 
-from my_types import Args, Tasks, Model, LongVector
+from my_types import Args, Tasks, Model, LongVector, DatasetTasks
 
 # Local types
 

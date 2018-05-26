@@ -11,7 +11,8 @@ epochs_per_task: 5
 stop_if_not_better: 5
 
 model:
-  hidden_units: 100
+  name: mlp
+  hidden_units: [100]
 
 elasticity:
   mode: ewc
