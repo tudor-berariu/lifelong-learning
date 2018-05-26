@@ -2,9 +2,11 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
+from torch import Tensor
 from torch.utils.data.dataset import Dataset
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
+from multiprocessing.pool import ThreadPool
 
 
 ORIGINAL_SIZE = {
@@ -31,15 +33,10 @@ DATASETS = {
 class InMemoryDataSet(object):
 
     def __init__(self,
-                 dataset: Dataset,
+                 data: Tensor, target: Tensor,
                  cut: Optional[Tuple[float, float]] = None,
                  classes: Optional[List[int]] = None,
                  reset_targets: bool = False) -> None:
-
-        loader = DataLoader(dataset, batch_size=len(dataset))
-        data, target = next(iter(loader))
-        del loader
-
         if cut:
             if not 0 <= cut[0] < cut[1] <= 1:
                 raise ValueError
@@ -68,6 +65,7 @@ class InMemoryDataSet(object):
 
 
 Padding = Tuple[int, int, int, int]
+Datasets = Tuple[InMemoryDataSet, Optional[InMemoryDataSet], InMemoryDataSet]
 
 
 def get_padding(in_size: torch.Size, out_size: torch.Size) -> Padding:
@@ -110,15 +108,8 @@ def get_mean_and_std(dataset_name: str,
     return mean, std
 
 
-Datasets = Tuple[InMemoryDataSet, Optional[InMemoryDataSet], InMemoryDataSet]
-
-
-def get_datasets(dataset_name: str,
-                 in_size: Optional[torch.Size] = None,
-                 classes: Optional[List[int]] = None,
-                 reset_targets: bool = False,
-                 validation: Optional[float] = .1,
-                 device: torch.device = torch.device("cpu")) -> Datasets:
+def load_data_async(dataset_name: str,
+                    in_size: Optional[torch.Size] = None):
 
     original_size = ORIGINAL_SIZE[dataset_name]
     in_size = in_size if in_size is not None else original_size
@@ -145,26 +136,61 @@ def get_datasets(dataset_name: str,
             transforms.Normalize((mean,), (std,))
         ]))
 
-    kwargs = {"classes": classes, "reset_targets": reset_targets}
+    loader = DataLoader(train_data, batch_size=len(train_data),
+                        num_workers=4)
+    train_data, train_target = next(iter(loader))
+    del loader
 
-    if validation:
-        if not .0 < validation <= 1:
-            raise ValueError
+    loader = DataLoader(test_data, batch_size=len(test_data),
+                        num_workers=4)
+    test_data, test_target = next(iter(loader))
+    del loader
 
-        t_cut = (0, 1. - validation)
-        v_cut = (1. - validation, 1.)
+    return train_data, train_target, test_data, test_target
 
-        train_set = InMemoryDataSet(train_data, cut=t_cut, **kwargs)
-        valid_set = InMemoryDataSet(train_data, cut=v_cut, **kwargs)
 
-    else:
-        train_set = InMemoryDataSet(train_data, **kwargs)
-        valid_set = None
+class DataSetFactory(object):
 
-    test_set = InMemoryDataSet(test_data, **kwargs)
+    def __init__(self, all_datasets: List[str],
+                 in_size: Optional[torch.Size] = None) -> None:
+        self.full_data = {}
+        pool = ThreadPool(processes=len(all_datasets))
+        for dataset_name in all_datasets:
+            self.full_data[dataset_name] = pool.apply_async(
+                load_data_async, (dataset_name, in_size))
 
-    for data_set in [train_set, valid_set, test_set]:
-        if data_set is not None:
-            data_set.to_(device)
+    def get_datasets(self,
+                     dataset_name: str,
+                     classes: Optional[List[int]]=None,
+                     reset_targets: bool=False,
+                     validation: Optional[float]=.1,
+                     device: torch.device=torch.device("cpu")) -> Datasets:
 
-    return train_set, valid_set, test_set
+        train_data, train_target, test_data, test_target = \
+            self.full_data[dataset_name].get()
+
+        kwargs = {"classes": classes, "reset_targets": reset_targets}
+
+        if validation:
+            if not .0 < validation <= 1:
+                raise ValueError
+
+            t_cut = (0, 1. - validation)
+            v_cut = (1. - validation, 1.)
+
+            train_set = InMemoryDataSet(
+                train_data, train_target, cut=t_cut, **kwargs)
+            valid_set = InMemoryDataSet(
+                train_data, train_target, cut=v_cut, **kwargs)
+
+        else:
+            train_set = InMemoryDataSet(train_data, train_target, **kwargs)
+            valid_set = None
+
+        test_set = InMemoryDataSet(test_data, test_target, **kwargs)
+
+        for data_set in [train_set, valid_set, test_set]:
+            if data_set is not None:
+                data_set.to_(device)
+
+        return train_set, valid_set, test_set

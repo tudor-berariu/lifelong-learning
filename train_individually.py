@@ -22,7 +22,7 @@ def train(train_loader: TaskDataLoader, model: nn.Module,
 
     model.train()
 
-    for batch_idx, (data, target) in train_loader:
+    for batch_idx, (data, target) in enumerate(train_loader):
         optimizer.zero_grad()
         output = model(data)
         loss = functional.cross_entropy(output, target)
@@ -94,9 +94,9 @@ def train_individually(model_class: Type,
 
     for task_idx, data_loaders in enumerate(train_tasks):
         train_loader, validate_loader = data_loaders
-        dataset_name = train_loader.dataset_name
+        task_name = train_loader.name
 
-        print(f"Training on task {task_no:d}: {data_loader.dataset_name:s}.")
+        print(f"Training on task {task_idx:d}: {task_name:s}.")
 
         # Initialize model & optim
         model: nn.Module = model_class(model_params, in_size, out_size)
@@ -117,7 +117,7 @@ def train_individually(model_class: Type,
 
             train_info = {"acc": train_loss, "loss": train_acc}
             val_info = {"acc": val_acc, "loss": val_loss}
-            results[dataset_name] = val_info
+            results[task_name] = val_info
             show_results(seen, results, best_results)
 
             best_results, changed = update_results(results, best_results)
