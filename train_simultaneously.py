@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as functional
-from typing import Type, Callable
+from typing import Type, Callable, Tuple
 
 # Project imports
 from my_types import Args, Tasks, Model, LongVector, DatasetTasks
@@ -84,7 +84,7 @@ def train_simultaneously(model_class: Type,
 
     epochs_per_task = args.train.epochs_per_task
     model_params = args.model
-    batch_report_freq = args.batch_report_freq
+    batch_report_freq = args.reporting.batch_report_freq
 
     in_size = multitask.in_size
     out_size = multitask.out_size

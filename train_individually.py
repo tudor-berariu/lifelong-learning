@@ -78,7 +78,7 @@ def train_individually(model_class: Type,
 
     epochs_per_task = args.train.epochs_per_task
     model_params = args.model
-    batch_report_freq = args.batch_report_freq
+    batch_report_freq = args.reporting.batch_report_freq
 
     in_size = multitask.in_size
     out_size = multitask.out_size
@@ -86,6 +86,7 @@ def train_individually(model_class: Type,
     train_tasks = multitask.train_tasks()
 
     report = Reporting(args)
+    save_report_freq = args.reporting.save_report_freq
 
     for task_idx, data_loaders in enumerate(train_tasks):
         train_loader, validate_loader = data_loaders
@@ -97,12 +98,8 @@ def train_individually(model_class: Type,
         model: nn.Module = model_class(model_params, in_size, out_size)
         optimizer = get_optimizer(model.parameters())
 
-        # Reporting
-        results = {}
-        dataset_avg = {}
-
         seen = 0
-        best_results, not_changed = None, 0
+        val_epoch = 0
 
         for crt_epoch in range(epochs_per_task):
 
@@ -113,11 +110,11 @@ def train_individually(model_class: Type,
                                           report_freq=batch_report_freq)
             seen += len(train_loader)
             val_loss, val_acc = validate(validate_loader, model, crt_epoch)
+            val_epoch += 1
 
             # Reporting --
             train_info = {"acc": train_loss, "loss": train_acc}
             val_info = {"acc": val_acc, "loss": val_loss}
-            results[task_name] = val_info
 
             # show_results(seen, results, best_results)
             # best_results, changed = update_results(results, best_results)
@@ -125,5 +122,9 @@ def train_individually(model_class: Type,
             # if not changed:
             #     print(f"No improvement for {not_changed:d} evals!!")
 
-            report.trace_train(task_idx, crt_epoch, seen, train_info)
-            report.trace_eval(task_idx, crt_epoch, seen, val_info)
+            report.trace_train(seen, task_idx, crt_epoch, train_info)
+            new_best_acc, new_best_loss = report.trace_eval(seen, task_idx, crt_epoch,
+                                                            val_epoch, val_info)
+
+            if crt_epoch % save_report_freq == 0:
+                report.save()

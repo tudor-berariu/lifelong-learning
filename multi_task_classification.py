@@ -259,7 +259,7 @@ def train_simultaneously(model: nn.Module,
     all_tasks_no = sum([p for (_, p) in task_lps])
     avg_length = sum([l * p for (l, p) in task_lps]) / all_tasks_no
     max_inputs = int(avg_length * args.epochs_per_task * all_tasks_no)
-    eval_freq = int(avg_length * args.eval_freq)
+    eval_freq = int(avg_length * args.reporting.eval_freq)
 
     print(f"Model will be trained for a maximum of {max_inputs:d} samples.")
     print(f"Model will be evaluated every {eval_freq:d} training samples.")
@@ -314,7 +314,7 @@ def train_simultaneously(model: nn.Module,
             if not changed:
                 print(f"No improvement for {not_changed:d} evals!!")
             trace.append((seen, -1, results))
-            if len(trace) % args.save_freq == 0:
+            if len(trace) % args.reporting.save_freq == 0:
                 torch.save(trace, os.path.join(args.out_dir,
                                                f"seen_{seen:d}_trace.pkl"))
             if not_changed > 0 and args.stop_if_not_better == not_changed:
@@ -431,7 +431,7 @@ def train_in_sequence(model: nn.Module,
             print(f"CE loss: {train_info['ce_loss'][-1]:f}, "
                   f"Elastic loss: {train_info['ec_loss'][-1]:f}")
 
-            if total_epochs_no % args.eval_freq == 0:
+            if total_epochs_no % args.reporting.eval_freq == 0:
                 results = test_all(model, tasks, args)
                 model.train()
                 model.use_softmax = False
@@ -450,7 +450,7 @@ def train_in_sequence(model: nn.Module,
                 else:
                     eval_df = pd.concat([eval_df, e_df]).reset_index(drop=True)
 
-                if len(trace) % args.save_freq == 0:
+                if len(trace) % args.reporting.save_freq == 0:
                     train_df = pd.DataFrame(train_info)
                     add_exp_params(train_df, args)
 
