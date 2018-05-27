@@ -1,18 +1,21 @@
 title: "test_multi"
 no_cuda: False
+mode: "ind"
+keep_alive: no
 
-task:
-  datasets: ["fashion", "mnist"],
+tasks:
+  datasets: ["mnist"]
   in_size: [3, 32, 32]
   reset_targets: False
   validation: .8
   split: False
-  perms_no: 3
+  perms_no: 5
   permute_targets: no
 
 model:
   name: mlp
   hidden_units: [100]
+  use_softmax: no
 
 elasticity:
   mode: ewc
@@ -31,9 +34,9 @@ train:
   epochs_per_task: 5
   stop_if_not_better: 5
   test_batch_size: 0
-
   optimizer: Adam
   optimizer_args: { lr: 0.001 }
 
+batch_report_freq: 10
 eval_freq: 1
 save_freq: 1

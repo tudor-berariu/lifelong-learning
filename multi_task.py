@@ -76,7 +76,8 @@ class TaskDataLoader(object):
             target = dataset.target.index_select(0, idxs)
         else:
             data = dataset.data[start_idx:end_idx]
-            target = dataset.data[start_idx:end_idx]
+            # TODO CHECK IF CORRECT?!? (it was dataset.data)
+            target = dataset.target[start_idx:end_idx]
         self.__start_idx = end_idx
         return data, target
 

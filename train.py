@@ -2,19 +2,18 @@ import os
 from argparse import Namespace
 import torch
 import torch.optim as optim
-import torch.multiprocessing as mp
-from typing import Type, Callable, Tuple
+from typing import Type, Tuple
 from shutil import rmtree
+import importlib
 
 from liftoff.config import value_of, namespace_to_dict
 from liftoff.config import read_config
 
 from models import get_model
-from my_types import Args, Tasks, Model, LongVector, DatasetTasks
-from train_individually import train_individually
-from train_sequentially import train_sequentially
-from train_simultaneously import train_simultaneously
-from tasks import ORIGINAL_SIZE
+from my_types import Args
+import train_individually
+import train_sequentially
+import train_simultaneously
 from multi_task import MultiTask
 
 
@@ -45,11 +44,11 @@ def run(args: Args, multitask: MultiTask = None) -> None:
         os.mkdir(args.out_dir)
 
     if args.mode == "sim":
-        train_simultaneously(model_class, get_optim, multitask, args)
+        train_simultaneously.train_simultaneously(model_class, get_optim, multitask, args)
     elif args.mode == "seq":
-        train_sequentially(model_class, get_optim, multitask, args)
+        train_sequentially.train_sequentially(model_class, get_optim, multitask, args)
     elif args.mode == "ind":
-        train_individually(model_class, get_optim, multitask, args)
+        train_individually.train_individually(model_class, get_optim, multitask, args)
 
 
 def main(args: Args):
@@ -76,35 +75,39 @@ def main(args: Args):
     if not keep_alive:
         run(args)
     else:
-        # Keep multitask class
+        import traceback
+
+        # Keep multitask class & redo experiment with reload of config_file & modules
+
         multitask = MultiTask(args)  # type: MultiTask
 
         while True:
             # TODO Read again the config
             # args = read_config()  # type: Args
-
             os.system('clear')
 
             try:
                 run(args, multitask=multitask)
+            except KeyboardInterrupt:
+                print("\nKeyboard interupted\n")
             except Exception as e:
                 os.system('clear')
-                print(e)
-
-                print("Caught Error, worker terminated")
+                print("Caught Error, worker terminated\n")
+                print(e + "\n")
+                traceback.print_exc()
+                print()
             finally:
                 pass
 
             input("Press Enter to restart... ( ! Out directory will be reset ! )")
-            rmtree(args.out_dir)
-            os.mkdir(args.out_dir)
 
-            import sys
-            if globals().has_key('init_modules'):
-                for m in [x for x in sys.modules.keys() if x not in init_modules]:
-                    del (sys.modules[m])
-            else:
-                init_modules = sys.modules.keys()
+            # Reset necessary (remove out directory)
+            rmtree(args.out_dir)
+
+            # Reload modules (not recommended)
+            importlib.reload(train_individually)
+            importlib.reload(train_simultaneously)
+            importlib.reload(train_sequentially)
 
 
 if __name__ == "__main__":

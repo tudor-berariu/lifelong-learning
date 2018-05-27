@@ -20,11 +20,13 @@ class MLP(nn.Module):
         hidden_units: List[int] = cfg.hidden_units
 
         in_units = reduce(mul, in_size, 1)
-        self.fc = nn.ModuleList()
+        hidden_layers = []
         for hidden_size in hidden_units:
-            self.fc.append(nn.Linear(in_units, hidden_size))
-            self.fc.append(nn.ReLU())
+            hidden_layers.append(nn.Linear(in_units, hidden_size))
+            hidden_layers.append(nn.ReLU())
             in_units = hidden_size
+
+        self.fc = nn.Sequential(*hidden_layers)
 
         self.heads = nn.ModuleList()
         for out_size in out_sizes:

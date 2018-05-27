@@ -9,7 +9,7 @@ from termcolor import colored as clr
 from my_types import Args, Tasks, Model, LongVector, DatasetTasks
 from multi_task import MultiTask, TaskDataLoader
 from utils import AverageMeter, accuracy
-from reporting import Accuracy, Loss, show_results, update_results, Reporting
+from reporting import Accuracy, Loss, show_results, update_results, Reporting, EvalResult
 
 
 def train(train_loader: TaskDataLoader, model: nn.Module,
@@ -43,17 +43,16 @@ def train(train_loader: TaskDataLoader, model: nn.Module,
     return losses.avg, correct_cnt/seen
 
 
-def validate(val_loader: TaskDataLoader, model: nn.Module, report_freq: float = 0.1):
+def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_freq: float = 0.1):
     losses = AverageMeter()
     acc = AverageMeter()
     correct_cnt = 0
     seen = 0
 
     with torch.no_grad():
-        for batch_idx, (data, target) in val_loader:
+        for batch_idx, (data, target) in enumerate(val_loader):
             output = model(data)
             loss = functional.cross_entropy(output, target)
-            loss.backward()
 
             (top1, correct), = accuracy(output, target)
             correct_cnt += correct
@@ -81,10 +80,6 @@ def train_individually(model_class: Type,
     model_params = args.model
     batch_report_freq = args.batch_report_freq
 
-    seen, total_epochs_no = 0, 0
-    trace, best_results = [], None
-    results = {}
-
     in_size = multitask.in_size
     out_size = multitask.out_size
 
@@ -101,9 +96,13 @@ def train_individually(model_class: Type,
         # Initialize model & optim
         model: nn.Module = model_class(model_params, in_size, out_size)
         optimizer = get_optimizer(model.parameters())
+
+        # Reporting
         results = {}
+        dataset_avg = {}
+
         seen = 0
-        trace, best_results, not_changed = [], None, 0
+        best_results, not_changed = None, 0
 
         for crt_epoch in range(epochs_per_task):
 
@@ -113,17 +112,18 @@ def train_individually(model_class: Type,
             train_loss, train_acc = train(train_loader, model, optimizer, crt_epoch,
                                           report_freq=batch_report_freq)
             seen += len(train_loader)
-            val_loss, val_acc = validate(validate_loader, model)
+            val_loss, val_acc = validate(validate_loader, model, crt_epoch)
 
+            # Reporting --
             train_info = {"acc": train_loss, "loss": train_acc}
             val_info = {"acc": val_acc, "loss": val_loss}
             results[task_name] = val_info
-            show_results(seen, results, best_results)
 
-            best_results, changed = update_results(results, best_results)
-            not_changed = 0 if changed else (not_changed + 1)
-            if not changed:
-                print(f"No improvement for {not_changed:d} evals!!")
+            # show_results(seen, results, best_results)
+            # best_results, changed = update_results(results, best_results)
+            # not_changed = 0 if changed else (not_changed + 1)
+            # if not changed:
+            #     print(f"No improvement for {not_changed:d} evals!!")
 
             report.trace_train(task_idx, crt_epoch, seen, train_info)
             report.trace_eval(task_idx, crt_epoch, seen, val_info)
