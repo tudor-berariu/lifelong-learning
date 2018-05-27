@@ -207,8 +207,46 @@ class MultiTask(object):
     def get_task(self, idx: int) -> Tuple[TaskDataLoader, TaskDataLoader]:
         pass
 
-    def merged_tasks(self) -> Tuple[TaskDataLoader, TaskDataLoader]:
-        pass
+    def merged_tasks(self) -> Iterator[Batch]:
+        # TODO: combine batches from all loaders
+        loaders = []
+        for task in self._tasks:
+            loaders.append(iter(TaskDataLoader(task.name, task.train_set,
+                                               task.in_permutation,
+                                               task.out_permutation,
+                                               self.batch_size // len(self),
+                                               self.drop_last,
+                                               self.shuffle)))
+        while True:
+            inputs: List[torch.Tensor] = []
+            targets: List[torch.Tensor] = []
+            new_loaders = []
+            for (loader, task) in zip(loaders, self._tasks):
+
+                try:
+                    (data, target) = next(loader)
+                    new_loaders.append(loader)
+                except StopIteration:
+                    new_iter = iter(TaskDataLoader(task.name, task.train_set,
+                                                   task.in_permutation,
+                                                   task.out_permutation,
+                                                   self.batch_size // len(self),
+                                                   self.drop_last,
+                                                   self.shuffle))
+                    (data, target) = next(new_iter)
+                    new_loaders.append(new_iter)
+            inputs.append(data)
+            targets.append(target)
+            full_data: torch.Tensor
+            full_target: torch.Tensor
+            if len(inputs) > 1:
+                full_data = torch.cat(inputs, dim=0)
+                full_target = torch.cat(targets, dim=0)
+            else:
+                full_data, full_target = inputs[0], targets[0]
+
+            yield full_data, full_target
+            loaders = new_loaders
 
     def task_names(self) -> List[str]:
         return [task.name for task in self._tasks]
@@ -275,6 +313,32 @@ def test_perms():
             print("new_batch")
 
 
+def test_simul():
+    args = Namespace(
+        tasks=Namespace(
+            datasets=["fake"],
+            in_size=[3, 32, 32],
+            reset_targets=False,
+            validation=.8,
+            split=False,
+            perms_no=3,
+            permute_targets=True
+        ),
+        train=Namespace(
+            batch_size=6000,
+            shuffle=True
+        )
+    )
+    mt = MultiTask(args, torch.device("cuda:0"))
+    i = 0
+    for x, y in mt.merged_tasks():
+        print("*")
+        i += 1
+        if i > 1000:
+            break
+
+
 if __name__ == "__main__":
+    test_simul()
     test_perms()
     test_split()
