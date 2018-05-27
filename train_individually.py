@@ -2,14 +2,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as functional
 import torch.optim as optim
-from typing import Type, Callable, List, Tuple
+from typing import Type, Callable, Tuple
 from termcolor import colored as clr
 
 # Project imports
-from my_types import Args, Tasks, Model, LongVector, DatasetTasks
+from my_types import Args
 from multi_task import MultiTask, TaskDataLoader
 from utils import AverageMeter, accuracy
-from reporting import Accuracy, Loss, show_results, update_results, Reporting, EvalResult
+from reporting import Reporting
 
 
 def train(train_loader: TaskDataLoader, model: nn.Module,

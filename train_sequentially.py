@@ -10,7 +10,7 @@ from multi_task import MultiTask
 
 def train_sequentially(model_class: Type,
                        get_optimizer: Callable[[nn.Module], optim.Optimizer],
-                       tasks: MultiTask,
+                       multitask: MultiTask,
                        args: Args)-> None:
 
     return None

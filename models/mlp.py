@@ -15,7 +15,7 @@ class MLP(nn.Module):
                  out_sizes: List[int]) -> None:
 
         super(MLP, self).__init__()
-
+        # print("HELLLOW WORLD")
         self.__use_softmax: bool = cfg.use_softmax
         hidden_units: List[int] = cfg.hidden_units
 

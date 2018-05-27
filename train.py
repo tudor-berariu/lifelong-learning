@@ -1,3 +1,4 @@
+import sys
 import os
 from argparse import Namespace
 import torch
@@ -5,6 +6,7 @@ import torch.optim as optim
 from typing import Type, Tuple
 from shutil import rmtree
 import importlib
+
 
 from liftoff.config import value_of, namespace_to_dict
 from liftoff.config import read_config
