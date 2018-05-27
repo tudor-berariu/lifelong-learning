@@ -7,9 +7,9 @@ from functools import reduce
 import torch
 from torch import Tensor
 
+from my_types import Args
 from datasets import CLASSES_NO, InMemoryDataSet, DataSetFactory
 
-Args = NewType("Args", Namespace)
 Batch = Tuple[Tensor, Tensor]
 
 
@@ -76,7 +76,8 @@ class TaskDataLoader(object):
             target = dataset.target.index_select(0, idxs)
         else:
             data = dataset.data[start_idx:end_idx]
-            target = dataset.data[start_idx:end_idx]
+            # TODO CHECK IF CORRECT?!? (it was dataset.data)
+            target = dataset.target[start_idx:end_idx]
         self.__start_idx = end_idx
         return data, target
 
@@ -98,7 +99,7 @@ Task = NamedTuple("Task",
 
 class MultiTask(object):
 
-    def __init__(self, args: Namespace,
+    def __init__(self, args: Args,
                  device: torch.device = torch.device("cpu")) -> None:
 
         datasets = args.tasks.datasets  # type: List[str]

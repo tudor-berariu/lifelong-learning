@@ -1,4 +1,4 @@
-from typing import Dict, NamedTuple, Optional, Tuple, TypeVar
+from typing import Dict, NamedTuple, Optional, Tuple, TypeVar, NewType
 from argparse import Namespace
 from torch.nn import Module
 
@@ -6,7 +6,7 @@ from torchutils import InMemoryDataLoader
 
 # Types used in this program
 
-Args = Namespace
+Args = NewType("Arguments", Namespace)
 Loaders = Tuple[InMemoryDataLoader, InMemoryDataLoader]
 
 LongVector = TypeVar('LongVector')

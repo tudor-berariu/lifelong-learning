@@ -47,7 +47,7 @@ class MLP(nn.Module):
 
 
 def get_model(args: Args) -> Model:
-    return MLP(args.in_size, args.model.hidden_units)
+    return MLP(args.in_size, args.model.hidden_units[0])
 
 
 def get_optimizer(model: Model, args: Args) -> Optimizer:
