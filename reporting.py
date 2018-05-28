@@ -153,7 +153,8 @@ class Reporting(object):
         # Plot for individual training
         # -- Plot per individual task
         plot_t, plot_c = self.plot_t, self.plot_c
-        if self.mode == "ind":
+        mode = self.mode
+        if mode == "ind" or mode == "sim":
             if plot_t:
                 plot_t.tick([(task_name, {f"loss_train": loss, "acc_train": acc}, train_epoch)])
 
@@ -196,7 +197,8 @@ class Reporting(object):
         # Plot for individual training
         # -- Plot per individual task
         plot_t, plot_c = self.plot_t, self.plot_c
-        if self.mode == "ind":
+        mode = self.mode
+        if mode == "ind" or mode == "sim":
             if plot_t:
                 plot_t.tick([(task_name, {f"loss_eval": loss, "acc_eval": acc}, train_epoch)])
 
