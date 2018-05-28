@@ -204,8 +204,16 @@ class MultiTask(object):
                                     batch_size=0)
             yield tst_dl
 
-    def get_task(self, idx: int) -> Tuple[TaskDataLoader, TaskDataLoader]:
-        pass
+    def get_task_info(self):
+        task: Task
+        tasks_info = []
+        for idx, task in enumerate(self._tasks):
+            tasks_info.append({"idx": idx,
+                               "dataset_name": task.dataset_name,
+                               "classes": task.classes,
+                               "p_idx": task.p_idx,
+                               "name": task.name})
+        return tasks_info
 
     def merged_tasks(self) -> Iterator[Batch]:
         # TODO: combine batches from all loaders
