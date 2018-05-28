@@ -103,8 +103,7 @@ def train_individually(model_class: Type,
 
         for crt_epoch in range(epochs_per_task):
 
-            # Adjust optimizer learning rate
-            # TODO
+            # TODO Adjust optimizer learning rate
 
             train_loss, train_acc = train(train_loader, model, optimizer, crt_epoch,
                                           report_freq=batch_report_freq)
