@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as functional
-from typing import Type, Callable, Tuple
+from typing import Type, Callable, Tuple, Iterator
 from termcolor import colored as clr
 
 # Project imports
@@ -12,13 +12,14 @@ from multi_task import MultiTask
 
 # Project imports
 from my_types import Args
-from multi_task import MultiTask, TaskDataLoader
+from multi_task import MultiTask, TaskDataLoader, Batch
 from utils import AverageMeter, accuracy
 from reporting import Reporting
 
 
-def train(train_loader: TaskDataLoader, model: nn.Module,
-          optimizer: torch.optim.Optimizer, epoch: int, report_freq: float = 0.3)-> Tuple[int, int]:
+def train(train_loader: Iterator[Batch], max_batch: int, model: nn.Module,
+          optimizer: torch.optim.Optimizer,
+          epoch: int, report_freq: float = 0.3)-> Tuple[int, int, int]:
 
     losses = AverageMeter()
     acc = AverageMeter()
@@ -28,6 +29,9 @@ def train(train_loader: TaskDataLoader, model: nn.Module,
     model.train()
 
     for batch_idx, (data, target) in enumerate(train_loader):
+        if batch_idx >= max_batch:
+            break
+
         optimizer.zero_grad()
         output = model(data)
         loss = functional.cross_entropy(output, target)
@@ -46,10 +50,7 @@ def train(train_loader: TaskDataLoader, model: nn.Module,
                   f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
                   f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
 
-        if batch_idx > 20:
-            break
-
-    return losses.avg, correct_cnt / float(seen)
+    return losses.avg, correct_cnt / float(seen), seen
 
 
 def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_freq: float = 0.1):
@@ -93,6 +94,7 @@ def train_simultaneously(model_class: Type,
     out_size = multitask.out_size
 
     train_loader = multitask.merged_tasks()
+    train_batch_cnt = multitask.get_merged_tasks_estimated_batches_cnt()
 
     report = Reporting(args, multitask.get_task_info())
     save_report_freq = args.reporting.save_report_freq
@@ -108,10 +110,9 @@ def train_simultaneously(model_class: Type,
     for crt_epoch in range(epochs_per_task):
         # TODO Adjust optimizer learning rate
 
-        train_loss, train_acc = train(train_loader, model, optimizer, crt_epoch,
-                                      report_freq=batch_report_freq)
-        # seen += len(train_loader)
-        seen += 300
+        train_loss, train_acc, train_seen = train(train_loader, train_batch_cnt, model, optimizer,
+                                                  crt_epoch, report_freq=batch_report_freq)
+        seen += train_seen
 
         for task_idx, validate_loader in enumerate(multitask.test_tasks(no_tasks)):
             val_loss, val_acc = validate(validate_loader, model, crt_epoch)
@@ -120,6 +121,7 @@ def train_simultaneously(model_class: Type,
             train_info = {"acc": train_acc, "loss": train_loss}
             val_info = {"acc": val_acc, "loss": val_loss}
 
+            print(val_loss)
             report.trace_train(seen, task_idx, crt_epoch, train_info)
             new_best_acc, new_best_loss = report.trace_eval(seen, task_idx, crt_epoch,
                                                             val_epoch, val_info)

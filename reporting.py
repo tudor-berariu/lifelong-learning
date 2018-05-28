@@ -154,7 +154,10 @@ class Reporting(object):
         # -- Plot per individual task
         plot_t, plot_c = self.plot_t, self.plot_c
         mode = self.mode
-        if mode == "ind" or mode == "sim":
+        if mode == "ind":
+            if plot_t:
+                plot_t.tick([(task_name, {f"loss_train": loss, "acc_train": acc}, train_epoch)])
+        elif mode == "sim":
             if plot_t:
                 plot_t.tick([(task_name, {f"loss_train": loss, "acc_train": acc}, train_epoch)])
 
@@ -198,7 +201,12 @@ class Reporting(object):
         # -- Plot per individual task
         plot_t, plot_c = self.plot_t, self.plot_c
         mode = self.mode
-        if mode == "ind" or mode == "sim":
+        if mode == "ind":
+            if plot_t:
+                plot_t.tick([(task_name, {f"loss_eval": loss, "acc_eval": acc}, train_epoch)])
+
+            self._show_task_result(train_epoch, task_name, acc, loss, new_best_acc, new_best_loss)
+        elif mode == "sim":
             if plot_t:
                 plot_t.tick([(task_name, {f"loss_eval": loss, "acc_eval": acc}, train_epoch)])
 

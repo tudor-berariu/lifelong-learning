@@ -7,14 +7,14 @@ tasks:
   datasets: ["mnist"]
   in_size: [3, 32, 32]
   reset_targets: False
-  validation: .8
+  validation: .2
   split: False
-  perms_no: 5
+  perms_no: 0
   permute_targets: no
 
 model:
   name: mlp
-  hidden_units: [100]
+  hidden_units: [100, 100]
   use_softmax: no
 
 elasticity:
@@ -29,7 +29,7 @@ elasticity:
   signed_on_cpu: True
 
 train:
-  batch_size: 128
+  batch_size: 256
   shuffle: True
   epochs_per_task: 100
   stop_if_not_better: 5

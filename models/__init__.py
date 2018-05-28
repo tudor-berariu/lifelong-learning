@@ -1,7 +1,9 @@
 from .mlp import MLP
+from .lenet import LeNet
 
 ALL_MODELS = {
     "mlp": MLP,
+    "lenet": LeNet
 }
 
 

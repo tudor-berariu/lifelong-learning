@@ -3,7 +3,7 @@ from typing import Iterator, List, NamedTuple, NewType, Optional, Tuple
 from argparse import Namespace
 from operator import mul
 from functools import reduce
-
+import numpy as np
 import torch
 from torch import Tensor
 
@@ -111,6 +111,7 @@ class MultiTask(object):
         permute_targets = args.tasks.permute_targets  # type: bool
 
         self.batch_size = args.train.batch_size  # type: int
+        self.test_batch_size = args.train.test_batch_size # type: int
         self.shuffle = args.train.shuffle  # type: bool
         self.drop_last = False
 
@@ -191,7 +192,7 @@ class MultiTask(object):
             snd = task.validation_set if task.validation_set else task.test_set
             tst_dl = TaskDataLoader(task.name, snd,
                                     task.in_permutation, task.out_permutation,
-                                    batch_size=0)
+                                    batch_size=self.test_batch_size)
             yield (tr_dl, tst_dl)
 
     def test_tasks(self, first_n: int = 0) -> Iterator[TaskDataLoader]:
@@ -201,7 +202,7 @@ class MultiTask(object):
             dst = task.validation_set if task.validation_set else task.test_set
             tst_dl = TaskDataLoader(task.name, dst,
                                     task.in_permutation, task.out_permutation,
-                                    batch_size=0)
+                                    batch_size=self.test_batch_size)
             yield tst_dl
 
     def get_task_info(self):
@@ -217,12 +218,14 @@ class MultiTask(object):
 
     def merged_tasks(self) -> Iterator[Batch]:
         # TODO: combine batches from all loaders
+        batch_size = self.batch_size // len(self)
+
         loaders = []
         for task in self._tasks:
             loaders.append(iter(TaskDataLoader(task.name, task.train_set,
                                                task.in_permutation,
                                                task.out_permutation,
-                                               self.batch_size // len(self),
+                                               batch_size,
                                                self.drop_last,
                                                self.shuffle)))
         while True:
@@ -238,7 +241,7 @@ class MultiTask(object):
                     new_iter = iter(TaskDataLoader(task.name, task.train_set,
                                                    task.in_permutation,
                                                    task.out_permutation,
-                                                   self.batch_size // len(self),
+                                                   batch_size,
                                                    self.drop_last,
                                                    self.shuffle))
                     (data, target) = next(new_iter)
@@ -255,6 +258,13 @@ class MultiTask(object):
 
             yield full_data, full_target
             loaders = new_loaders
+
+    def get_merged_tasks_estimated_batches_cnt(self):
+        sizes = []
+        for task in self._tasks:
+            sizes.append(len(task.train_set))
+        batches_cnt = np.mean(sizes) // (self.batch_size // len(self))
+        return batches_cnt
 
     def task_names(self) -> List[str]:
         return [task.name for task in self._tasks]
