@@ -1,7 +1,7 @@
 title: "test_multi"
 no_cuda: False
 mode: "ind"
-keep_alive: no
+keep_alive: yes
 
 tasks:
   datasets: ["mnist"]
@@ -29,14 +29,21 @@ elasticity:
   signed_on_cpu: True
 
 train:
-  batch_size: 6000
+  batch_size: 128
   shuffle: True
-  epochs_per_task: 5
+  epochs_per_task: 100
   stop_if_not_better: 5
   test_batch_size: 0
   optimizer: Adam
   optimizer_args: { lr: 0.001 }
 
-batch_report_freq: 10
-eval_freq: 1
-save_freq: 1
+reporting:
+  eval_freq: 1
+  save_report_freq: 5
+  save_report_trace: yes
+  batch_report_freq: 10
+  epoch_report_freq: 1
+  plot_tensorboard: no
+  tensorboard_auto_start: yes
+  plot_comet: no
+  comet_plot_freq_factor: 0.1

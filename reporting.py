@@ -5,8 +5,11 @@ import torch
 import os
 import subprocess
 from comet_ml import Experiment
+from termcolor import colored as clr
 
-from my_types import Args, Tasks, Model, LongVector, DatasetTasks
+from my_types import Args, Tasks, Model, LongVector, DatasetTasks, Optional
+from multi_task import MultiTask
+
 Accuracy = float
 Loss = float
 
@@ -37,9 +40,10 @@ class TensorboardSummary(object):
         self.auto_start_board = auto_start_board
         self.board_started = False
 
-    def tick(self, data):
+    def tick(self, data: List[Tuple[str, Dict, int]]):
         """
-        :param data: Example:
+        :param data: plot_name, metric_dict, step
+        Example:
             [
             "acc", {dataset_1: 33.3, dataset_3: 44.4}, 3
             "loss", {dataset_1: 0.123, dataset_3: 0.33}, 3
@@ -72,17 +76,21 @@ class TensorboardSummary(object):
 
 class Reporting(object):
 
-    def __init__(self, args: Args):
-
+    def __init__(self, args: Args, task_info: List[Dict]):
         self._args = args
+        self._task_info = task_info
+
         self.title = args.title
-        self.use_tensorboard = args.reporting.plot_tensorboard
-        self.use_comet = args.reporting.plot_comet
         self._save_path = os.path.join(args.out_dir, 'reporting')
         self.out_dir = args.out_dir
         self.mode = args.mode
+        self.use_tensorboard = args.reporting.plot_tensorboard
+        self.use_comet = args.reporting.plot_comet
+        self.save_report_trace = args.reporting.save_report_trace
 
-        self.task_idx_to_dataset = task_idx_to_name = dict({})  # TODO Missing from multitask
+        self.task_idx_to_dataset = task_idx_to_name = dict({x["idx"]: x["dataset_name"]
+                                                            for x in task_info})
+        self.task_name = dict({x["idx"]: x["name"] for x in task_info})
         self.dataset_task_idx = {d_n: [] for d_n in set(self.task_idx_to_dataset.values())}
 
         for idx, dataset_name in task_idx_to_name.items():
@@ -101,24 +109,32 @@ class Reporting(object):
         self._last_eval = dict({task_idx: {"acc": -1, "seen": -1, "loss":  np.inf}
                                 for task_idx in task_idx_to_name.keys()})
 
-        self._save_variables = ["_train_trace", "_eval_trace", "_start_time", "_args",
-                                "_best_eval", "_last_eval"]
+        # The following variables will be saved in a dictionary
+        self._save_variables = ["_start_time", "_args",
+                                "_best_eval", "_last_eval", "_task_info"]
+        if self.save_report_trace:
+            self._save_variables.extend(["_train_trace", "_eval_trace"])
 
-        self.plot_t: TensorboardSummary = None
-        self.plot_c: Experiment = None
+        self.plot_t: TensorboardSummary = self._init_tensorboard() if self.use_tensorboard else None
+        self.plot_c: Experiment = self._init_comet_ml() if self.use_comet else None
 
-    def init_tensorboard(self):
+    def _init_tensorboard(self):
         # -- Tensorboard SummaryWriter
-        if self.use_tensorboard:
-            self.plot_t = TensorboardSummary(self.title, path_to_save=self.out_dir)
+        plot_t = TensorboardSummary(
+                self.title, path_to_save=self.out_dir,
+                auto_start_board=self._args.reporting.tensorboard_auto_start
+            )
+        return plot_t
 
-    def init_comet_ml(self):
-        self.plot_c = Experiment(api_key="HWzTsfF0Wjk1t45c1T6q9BQMJ",
-                                 project_name="lifelong-learning",
-                                 team_name="nemodrivers",
-                                 log_code=False, log_graph=False,
-                                 auto_param_logging=False, auto_metric_logging=False,
-                                 auto_output_logging=False)
+    def _init_comet_ml(self):
+        plot_c = Experiment(api_key="HWzTsfF0Wjk1t45c1T6q9BQMJ",
+                            project_name="lifelong-learning",
+                            team_name="nemodrivers",
+                            log_code=False, log_graph=False,
+                            auto_param_logging=False, auto_metric_logging=False,
+                            auto_output_logging=False)
+        plot_c.log_parameter()
+        return plot_c
 
     def trace_train(self, seen_training: int, task_idx: int, train_epoch: int, info: dict):
         trace = self._train_trace
@@ -128,8 +144,18 @@ class Reporting(object):
         if task_idx not in trace[seen_training]:
             trace[seen_training][task_idx] = []
 
-            info["train_epoch"] = train_epoch
+        info["train_epoch"] = train_epoch
         trace[seen_training][task_idx].append(info)
+
+        acc, loss = info["acc"], info["loss"]
+        task_name = self.task_name[task_idx]
+
+        # Plot for individual training
+        # -- Plot per individual task
+        plot_t, plot_c = self.plot_t, self.plot_c
+        if self.mode == "ind":
+            if plot_t:
+                plot_t.tick([(task_name, {f"loss_train": loss, "acc_train": acc}, train_epoch)])
 
     def trace_eval(self, seen_training: int, task_idx: int, train_epoch: int, val_epoch: int,
                    info: dict) -> Tuple[bool, bool]:
@@ -164,6 +190,17 @@ class Reporting(object):
             best_eval[task_idx]["loss"]["value"] = loss
             best_eval[task_idx]["loss"]["seen"] = seen_training
             new_best_loss = True
+
+        task_name = self.task_name[task_idx]
+
+        # Plot for individual training
+        # -- Plot per individual task
+        plot_t, plot_c = self.plot_t, self.plot_c
+        if self.mode == "ind":
+            if plot_t:
+                plot_t.tick([(task_name, {f"loss_eval": loss, "acc_eval": acc}, train_epoch)])
+
+            self._show_task_result(train_epoch, task_name, acc, loss, new_best_acc, new_best_loss)
 
         return new_best_acc, new_best_loss
 
@@ -205,5 +242,17 @@ class Reporting(object):
 
     def save(self):
         save_data = {key: self.__dict__[key] for key in self._save_variables}
-        torch.save(save_data, os.path.join(self._save_path, "results"))
+        torch.save(save_data, self._save_path)
 
+    @staticmethod
+    def _show_task_result(idx: int, task_name: str, acc: float, loss: float,
+                          is_acc_better: bool, is_loss_better: bool) -> None:
+        msg = f"      [{idx:6}]" +\
+              f"[Task {clr(f'{task_name:s}', attrs=['bold']):s}]\t"
+
+        colors = ['white', 'on_magenta'] if is_acc_better else ['yellow']
+        msg += f" Accuracy: {clr(f'{acc:5.2f}%', *colors):s}"
+
+        colors = ['white', 'on_magenta'] if is_loss_better else ['yellow']
+        msg += f" Loss: {clr(f'{loss:6.4f}', *colors):s}"
+        print(msg)
