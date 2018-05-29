@@ -80,6 +80,7 @@ def train_sequentially(model_class: Type,
     model_params = args.model
     batch_report_freq = args.reporting.batch_report_freq
     eval_freq = args.reporting.eval_freq
+    eval_not_trained = args.reporting.eval_not_trained
 
     in_size = multitask.in_size
     out_size = multitask.out_size
@@ -115,7 +116,8 @@ def train_sequentially(model_class: Type,
 
             # Evaluate
             if crt_epoch % eval_freq == 0 or crt_epoch == (epochs_per_task - 1):
-                for test_task_idx, validate_loader in enumerate(multitask.test_tasks(no_tasks)):
+                how_many = no_tasks if eval_not_trained else train_task_idx + 1
+                for test_task_idx, validate_loader in enumerate(multitask.test_tasks(how_many)):
                     val_loss, val_acc = validate(validate_loader, model, crt_epoch)
 
                     #  -- Reporting
