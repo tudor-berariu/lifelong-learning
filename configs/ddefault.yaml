@@ -1,6 +1,6 @@
 title: "test_multi"
 no_cuda: False
-mode: "ind"
+mode: "seq"
 keep_alive: yes
 
 tasks:
@@ -17,7 +17,7 @@ model:
   hidden_units: [100, 100]
   use_softmax: no
 
-elasticity:
+lifelong:
   mode: baseline
   alpha: 0.25
   scale: 100
@@ -43,7 +43,7 @@ reporting:
   save_report_trace: yes
   batch_report_freq: 10
   epoch_report_freq: 1
-  plot_tensorboard: no
+  plot_tensorboard: yes
   tensorboard_auto_start: yes
   plot_comet: no
   comet_plot_freq_factor: 0.1
