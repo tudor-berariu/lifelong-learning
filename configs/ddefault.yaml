@@ -18,7 +18,7 @@ model:
   use_softmax: no
 
 elasticity:
-  mode: ewc
+  mode: baseline
   alpha: 0.25
   scale: 100
   g_norm: 2

@@ -214,6 +214,10 @@ class Reporting(object):
 
         return new_best_acc, new_best_loss
 
+    def finished_training_task(self, task_idx: int) -> None:
+        # TODO Stuff to do when training has finished for a task
+        pass
+
     @property
     def get_dataset_avg(self) -> Dict:
         dataset_task_idx = self.dataset_task_idx

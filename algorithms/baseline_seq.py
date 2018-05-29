@@ -1,12 +1,11 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as functional
 import torch.optim as optim
-from typing import Type, Callable, Tuple
-from termcolor import colored as clr
+import torch.nn.functional as functional
+from typing import Type, Callable
 
 # Project imports
-from my_types import Args
+from my_types import Args, Tasks, Model, LongVector, DatasetTasks, Tuple
 from multi_task import MultiTask, TaskDataLoader
 from utils import AverageMeter, accuracy
 from reporting import Reporting
@@ -72,12 +71,10 @@ def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_fr
         return losses.avg, correct_cnt / float(seen)
 
 
-def train_individually(model_class: Type,
+def train_sequentially(model_class: Type,
                        get_optimizer: Callable[[nn.Module], optim.Optimizer],
                        multitask: MultiTask,
                        args: Args)-> None:
-
-    print(f"Training {clr('individually', attrs=['bold']):s} on all tasks.")
 
     epochs_per_task = args.train.epochs_per_task
     model_params = args.model
@@ -86,10 +83,15 @@ def train_individually(model_class: Type,
     in_size = multitask.in_size
     out_size = multitask.out_size
 
+    # Initialize model & optim
+    model: nn.Module = model_class(model_params, in_size, out_size)
+    optimizer = get_optimizer(model.parameters())
+
     train_tasks = multitask.train_tasks()
 
     report = Reporting(args, multitask.get_task_info())
     save_report_freq = args.reporting.save_report_freq
+    seen = 0
 
     for task_idx, data_loaders in enumerate(train_tasks):
         train_loader, validate_loader = data_loaders
@@ -97,16 +99,9 @@ def train_individually(model_class: Type,
 
         print(f"Training on task {task_idx:d}: {task_name:s}.")
 
-        # Initialize model & optim
-        model: nn.Module = model_class(model_params, in_size, out_size)
-        optimizer = get_optimizer(model.parameters())
-
-        seen = 0
         val_epoch = 0
 
         for crt_epoch in range(epochs_per_task):
-
-            # TODO Adjust optimizer learning rate
 
             train_loss, train_acc = train(train_loader, model, optimizer, crt_epoch,
                                           report_freq=batch_report_freq)
@@ -126,5 +121,6 @@ def train_individually(model_class: Type,
             if crt_epoch % save_report_freq == 0:
                 report.save()
 
-    report.save()
+        report.finished_training_task()
 
+    report.save()

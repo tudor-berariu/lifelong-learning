@@ -59,6 +59,8 @@ def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_fr
     correct_cnt = 0
     seen = 0
 
+    model.eval()
+
     with torch.no_grad():
         for batch_idx, (data, target) in enumerate(val_loader):
             output = model(data)

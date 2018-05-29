@@ -13,9 +13,6 @@ from liftoff.config import read_config
 
 from models import get_model
 from my_types import Args
-import train_individually
-import train_sequentially
-import train_simultaneously
 from multi_task import MultiTask
 
 
@@ -46,11 +43,15 @@ def run(args: Args, multitask: MultiTask = None) -> None:
         os.mkdir(args.out_dir)
 
     if args.mode == "sim":
+        import train_simultaneously
         train_simultaneously.train_simultaneously(model_class, get_optim, multitask, args)
-    elif args.mode == "seq":
-        train_sequentially.train_sequentially(model_class, get_optim, multitask, args)
     elif args.mode == "ind":
+        import train_individually
         train_individually.train_individually(model_class, get_optim, multitask, args)
+    elif args.mode == "seq":
+        from algorithms import get_algorithm
+        train_sequentially = get_algorithm(args.lifelong.mode)
+        train_sequentially(model_class, get_optim, multitask, args)
 
 
 def main(args: Args):
