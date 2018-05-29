@@ -19,7 +19,7 @@ from reporting import Reporting
 
 def train(train_loader: Iterator[Batch], max_batch: int, model: nn.Module,
           optimizer: torch.optim.Optimizer,
-          epoch: int, report_freq: float = 0.3)-> Tuple[int, int, int]:
+          epoch: int, report_freq: int = -1)-> Tuple[int, int, int]:
 
     losses = AverageMeter()
     acc = AverageMeter()
@@ -45,7 +45,7 @@ def train(train_loader: Iterator[Batch], max_batch: int, model: nn.Module,
         acc.update(top1, data.size(0))
         losses.update(loss.item(), data.size(0))
 
-        if (batch_idx + 1) % report_freq == 0:
+        if (batch_idx + 1) % report_freq == 0 and report_freq > 0:
             print(f'\t\t[Train] [Epoch: {epoch:3}] [Batch: {batch_idx:5}]:\t '
                   f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
                   f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
@@ -53,7 +53,7 @@ def train(train_loader: Iterator[Batch], max_batch: int, model: nn.Module,
     return losses.avg, correct_cnt / float(seen), seen
 
 
-def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_freq=.1):
+def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_freq: int = -1):
     losses = AverageMeter()
     acc = AverageMeter()
     correct_cnt = 0
@@ -73,10 +73,10 @@ def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_fr
             acc.update(top1, data.size(0))
             losses.update(loss.item(), data.size(0))
 
-            if (batch_idx + 1) % report_freq == 0:
-                print(
-                    f'\t\t_val_{epoch}_{batch_idx}:\t : Loss: {losses.val:.4f} {losses.avg:.4f}\t'
-                    f'Acc: {acc.val:.2f} {acc.avg:.2f}')
+            if (batch_idx + 1) % report_freq == 0 and report_freq > 0:
+                print(f'\t\t[Eval] [Epoch: {epoch:3}] [Batch: {batch_idx:5}]:\t '
+                      f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
+                      f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
 
         return losses.avg, correct_cnt / float(seen)
 
@@ -116,16 +116,15 @@ def train_simultaneously(model_class: Type,
                                                   crt_epoch, report_freq=batch_report_freq)
         seen += train_seen
 
+        train_info = {"acc": train_acc, "loss": train_loss}
+        report.trace_train(seen, task_idx, crt_epoch, train_info)
+
         for task_idx, validate_loader in enumerate(multitask.test_tasks(no_tasks)):
-            val_loss, val_acc = validate(
-                validate_loader, model, crt_epoch, report_freq=1)
+            val_loss, val_acc = validate(validate_loader, model, crt_epoch, report_freq=1)
 
             #  -- Reporting
-            train_info = {"acc": train_acc, "loss": train_loss}
             val_info = {"acc": val_acc, "loss": val_loss}
 
-            print(val_loss)
-            report.trace_train(seen, task_idx, crt_epoch, train_info)
             new_best_acc, new_best_loss = report.trace_eval(seen, task_idx, crt_epoch,
                                                             val_epoch, val_info)
 

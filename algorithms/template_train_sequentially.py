@@ -62,6 +62,6 @@ def train_sequentially(model_class: Type,
             if crt_epoch % save_report_freq == 0:
                 report.save()
 
-        report.finished_training_task()
+        report.finished_training_task(task_idx, seen)
 
     report.save()

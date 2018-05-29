@@ -13,7 +13,7 @@ from reporting import Reporting
 
 
 def train(train_loader: TaskDataLoader, model: nn.Module,
-          optimizer: torch.optim.Optimizer, epoch: int, report_freq: float = 0.3)-> Tuple[int, int]:
+          optimizer: torch.optim.Optimizer, epoch: int, report_freq: int = -1)-> Tuple[int, int]:
 
     losses = AverageMeter()
     acc = AverageMeter()
@@ -36,7 +36,7 @@ def train(train_loader: TaskDataLoader, model: nn.Module,
         acc.update(top1, data.size(0))
         losses.update(loss.item(), data.size(0))
 
-        if (batch_idx + 1) % report_freq == 0:
+        if (batch_idx + 1) % report_freq == 0 and report_freq > 0:
             print(f'\t\t[Train] [Epoch: {epoch:3}] [Batch: {batch_idx:5}]:\t '
                   f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
                   f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
@@ -44,7 +44,7 @@ def train(train_loader: TaskDataLoader, model: nn.Module,
     return losses.avg, correct_cnt / float(seen)
 
 
-def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_freq: float = 0.1):
+def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_freq: int = -1):
     losses = AverageMeter()
     acc = AverageMeter()
     correct_cnt = 0
@@ -64,10 +64,10 @@ def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_fr
             acc.update(top1, data.size(0))
             losses.update(loss.item(), data.size(0))
 
-            if (batch_idx + 1) % report_freq == 0:
-                print(
-                    f'\t\t_val_{epoch}_{batch_idx}:\t : Loss: {losses.val:.4f} {losses.avg:.4f}\t'
-                    f'Acc: {acc.val:.2f} {acc.avg:.2f}')
+            if (batch_idx + 1) % report_freq == 0 and report_freq > 0:
+                print(f'\t\t[Eval] [Epoch: {epoch:3}] [Batch: {batch_idx:5}]:\t '
+                      f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
+                      f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
 
         return losses.avg, correct_cnt / float(seen)
 
@@ -125,6 +125,8 @@ def train_individually(model_class: Type,
 
             if crt_epoch % save_report_freq == 0:
                 report.save()
+
+        report.finished_training_task(task_idx, seen)
 
     report.save()
 

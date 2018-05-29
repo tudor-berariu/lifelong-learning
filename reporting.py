@@ -74,6 +74,10 @@ class TensorboardSummary(object):
         save_path = self.save_path
         subprocess.Popen(["tensorboard", "--logdir", save_path])
 
+    @property
+    def tb(self):
+        return self._writer
+
 
 class Reporting(object):
 
@@ -89,8 +93,13 @@ class Reporting(object):
         self.use_comet = args.reporting.plot_comet
         self.save_report_trace = args.reporting.save_report_trace
 
+        # Should read baseline for each task (individual/ simultanous)
+        self.task_base_ind = dict({x["idx"]: x["best_individual"] for x in task_info})
+        self.task_base_sim = dict({x["idx"]: x["best_simultaneous"] for x in task_info})
+
         self.task_idx_to_dataset = task_idx_to_name = dict({x["idx"]: x["dataset_name"]
                                                             for x in task_info})
+        self.no_tasks = len(task_idx_to_name)
         self.task_name = dict({x["idx"]: x["name"] for x in task_info})
         self.dataset_task_idx = {d_n: []
                                  for d_n in set(self.task_idx_to_dataset.values())}
@@ -111,15 +120,22 @@ class Reporting(object):
         self._last_eval = dict({task_idx: {"acc": -1, "seen": -1, "loss":  np.inf}
                                 for task_idx in task_idx_to_name.keys()})
 
+        self._task_train_tick: List[Dict] = []
+
+        self._eval_metrics: Dict = dict({"score_new": [], "score_base": [], "score_all": []})
+
         # The following variables will be saved in a dictionary
         self._save_variables = ["_start_time", "_args",
-                                "_best_eval", "_last_eval", "_task_info"]
+                                "_best_eval", "_last_eval", "_task_info", "_task_train_tick",
+                                "_eval_metrics"]
         if self.save_report_trace:
             self._save_variables.extend(["_train_trace", "_eval_trace"])
 
+        # Plot data
         self.plot_t: TensorboardSummary = self._init_tensorboard(
         ) if self.use_tensorboard else None
-        self.plot_c: Experiment = self._init_comet_ml() if self.use_comet else None
+        # self.plot_c: Experiment = self._init_comet_ml() if self.use_comet else None
+        self.plot_c = None
 
     def _init_tensorboard(self):
         # -- Tensorboard SummaryWriter
@@ -128,6 +144,10 @@ class Reporting(object):
             auto_start_board=self._args.reporting.tensorboard_auto_start
         )
         return plot_t
+
+    @property
+    def tb(self):
+        return self.plot_t.tb
 
     def _init_comet_ml(self):
         from comet_ml import Experiment
@@ -162,6 +182,9 @@ class Reporting(object):
             if plot_t:
                 plot_t.tick([(task_name, {f"loss_train": loss, "acc_train": acc}, train_epoch)])
         elif mode == "sim":
+            if plot_t:
+                plot_t.tick([(task_name, {f"loss_train": loss, "acc_train": acc}, train_epoch)])
+        elif mode == "seq":
             if plot_t:
                 plot_t.tick([(task_name, {f"loss_train": loss, "acc_train": acc}, train_epoch)])
 
@@ -215,12 +238,88 @@ class Reporting(object):
                 plot_t.tick([(task_name, {f"loss_eval": loss, "acc_eval": acc}, train_epoch)])
 
             self._show_task_result(train_epoch, task_name, acc, loss, new_best_acc, new_best_loss)
+        elif mode == "seq":
+            no_tasks = self.no_tasks
+            if plot_t:
+                # plot_t.tick([(task_name, {f"loss_eval": loss, "acc_eval": acc}, train_epoch)])
+                level = no_tasks - task_idx
+                plot_t.tick([("global/multi",
+                              {f"{task_name}_loss_eval": level + loss,
+                               f"{task_name}_acc_eval": level + acc},
+                              seen_training)])
+
+            self._show_task_result(train_epoch, task_name, acc, loss, new_best_acc, new_best_loss)
 
         return new_best_acc, new_best_loss
 
-    def finished_training_task(self, task_idx: int) -> None:
-        # TODO Stuff to do when training has finished for a task
-        pass
+    def finished_training_task(self, no_trained_tasks: int, seen: int) -> None:
+        last_eval = self._last_eval
+        task_train_tick = self._task_train_tick
+
+        eval_data = dict({})
+
+        task_eval_data = dict({})
+
+        not_evaluated = []
+        for task_idx, value in last_eval.items():
+            if value["seen"] == seen:
+                task_eval_data[task_idx] = value
+            else:
+                not_evaluated.append(task_idx)
+
+        tasks_idxs = []
+        all_acc = []
+        all_loss = []
+        for key in sorted(task_eval_data):
+            tasks_idxs.append(key)
+            all_acc.append(task_eval_data[key]["acc"])
+            all_loss.append(task_eval_data[key]["loss"])
+
+        eval_data["task"] = task_eval_data
+
+        eval_data["global_avg"] = {
+            "mean_acc_all": np.mean(all_acc),
+            "mean_loss_all": np.mean(all_loss),
+            "mean_acc_trained": np.mean(all_acc[:no_trained_tasks]),
+            "mean_loss_trained": np.mean(all_loss[:no_trained_tasks]),
+        }
+
+        eval_data["global"] = {
+            "tasks_idxs": tasks_idxs,
+            "acc": all_acc,
+            "loss": all_loss
+        }
+
+        task_train_tick.append(eval_data)
+
+        # Calculate metrics
+        eval_metrics = self._eval_metrics
+        eval_metrics["score_new"].append(task_eval_data[no_trained_tasks-1]["acc"])
+        eval_metrics["score_base"].append(task_eval_data[0]["acc"])
+
+        score_all = 0
+        base = self.task_base_ind
+        for key in sorted(task_eval_data):
+            if key < no_trained_tasks:
+                score_all += task_eval_data[key]["acc"] / base[key]
+
+        score_all = score_all / float(no_trained_tasks)
+        eval_metrics["score_all"].append(score_all)
+
+        # print(f"SCORE NEW: {eval_metrics['score_new']}")
+        # print(f"SCORE BASE: {eval_metrics['score_base']}")
+        # print(f"SCORE ALL: {eval_metrics['score_all']}")
+
+        # Plot
+        mode = self.mode
+        plot_t = self.plot_t
+        if mode == "seq":
+            if plot_t:
+                plot_t.tick([("global/average", eval_data["global_avg"], no_trained_tasks)])
+
+                # Draw vertical line
+                plot_t.tick([("global/multi", {f"marker_{task_idx}": 0}, seen)])
+                plot_t.tick([("global/multi", {f"marker_{task_idx}": self.no_tasks+1}, seen)])
 
     @property
     def get_dataset_avg(self) -> Dict:
@@ -246,8 +345,8 @@ class Reporting(object):
         all_loss = []
         for task_idx, value in last_eval.items():
             if value["seen"] != -1:
-                all_acc.extend(value["acc"])
-                all_loss.extend(value["loss"])
+                all_acc.append(value["acc"])
+                all_loss.append(value["loss"])
 
         global_avg = {
             "acc": all_acc,

@@ -222,7 +222,9 @@ class MultiTask(object):
                                "dataset_name": task.dataset_name,
                                "classes": task.classes,
                                "p_idx": task.p_idx,
-                               "name": task.name})
+                               "name": task.name,
+                               "best_individual": 1.,
+                               "best_simultaneous": 1.})
         return tasks_info
 
     def merged_tasks(self) -> Iterator[Batch]:

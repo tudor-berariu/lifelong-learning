@@ -12,7 +12,7 @@ from reporting import Reporting
 
 
 def train(train_loader: TaskDataLoader, model: nn.Module,
-          optimizer: torch.optim.Optimizer, epoch: int, report_freq: float = 0.3)-> Tuple[int, int]:
+          optimizer: torch.optim.Optimizer, epoch: int, report_freq: int = -1)-> Tuple[int, int]:
 
     losses = AverageMeter()
     acc = AverageMeter()
@@ -35,7 +35,7 @@ def train(train_loader: TaskDataLoader, model: nn.Module,
         acc.update(top1, data.size(0))
         losses.update(loss.item(), data.size(0))
 
-        if (batch_idx + 1) % report_freq == 0:
+        if (batch_idx + 1) % report_freq == 0 and report_freq > 0:
             print(f'\t\t[Train] [Epoch: {epoch:3}] [Batch: {batch_idx:5}]:\t '
                   f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
                   f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
@@ -43,7 +43,7 @@ def train(train_loader: TaskDataLoader, model: nn.Module,
     return losses.avg, correct_cnt / float(seen)
 
 
-def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_freq: float = 0.1):
+def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_freq: int = -1):
     losses = AverageMeter()
     acc = AverageMeter()
     correct_cnt = 0
@@ -63,10 +63,10 @@ def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_fr
             acc.update(top1, data.size(0))
             losses.update(loss.item(), data.size(0))
 
-            if (batch_idx + 1) % report_freq == 0:
-                print(
-                    f'\t\t_val_{epoch}_{batch_idx}:\t : Loss: {losses.val:.4f} {losses.avg:.4f}\t'
-                    f'Acc: {acc.val:.2f} {acc.avg:.2f}')
+            if (batch_idx + 1) % report_freq == 0 and report_freq > 0:
+                print(f'\t\t[Eval] [Epoch: {epoch:3}] [Batch: {batch_idx:5}]:\t '
+                      f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
+                      f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
 
         return losses.avg, correct_cnt / float(seen)
 
@@ -79,6 +79,7 @@ def train_sequentially(model_class: Type,
     epochs_per_task = args.train.epochs_per_task
     model_params = args.model
     batch_report_freq = args.reporting.batch_report_freq
+    eval_freq = args.reporting.eval_freq
 
     in_size = multitask.in_size
     out_size = multitask.out_size
@@ -90,14 +91,16 @@ def train_sequentially(model_class: Type,
     train_tasks = multitask.train_tasks()
 
     report = Reporting(args, multitask.get_task_info())
+
     save_report_freq = args.reporting.save_report_freq
     seen = 0
+    no_tasks = len(multitask)
 
-    for task_idx, data_loaders in enumerate(train_tasks):
+    for train_task_idx, data_loaders in enumerate(train_tasks):
         train_loader, validate_loader = data_loaders
         task_name = train_loader.name
 
-        print(f"Training on task {task_idx:d}: {task_name:s}.")
+        print(f"Training on task {train_task_idx:d}: {task_name:s}.")
 
         val_epoch = 0
 
@@ -107,20 +110,27 @@ def train_sequentially(model_class: Type,
                                           report_freq=batch_report_freq)
             seen += len(train_loader)
 
-            val_loss, val_acc = validate(validate_loader, model, crt_epoch)
-            val_epoch += 1
-
-            #  -- Reporting
             train_info = {"acc": train_acc, "loss": train_loss}
-            val_info = {"acc": val_acc, "loss": val_loss}
+            report.trace_train(seen, train_task_idx, crt_epoch, train_info)
 
-            report.trace_train(seen, task_idx, crt_epoch, train_info)
-            new_best_acc, new_best_loss = report.trace_eval(seen, task_idx, crt_epoch,
-                                                            val_epoch, val_info)
+            # Evaluate
+            if crt_epoch % eval_freq == 0 or crt_epoch == (epochs_per_task - 1):
+                for test_task_idx, validate_loader in enumerate(multitask.test_tasks(no_tasks)):
+                    val_loss, val_acc = validate(validate_loader, model, crt_epoch)
+
+                    #  -- Reporting
+                    val_info = {"acc": val_acc, "loss": val_loss}
+
+                    new_best_acc, new_best_loss = report.trace_eval(seen, test_task_idx, crt_epoch,
+                                                                    val_epoch, val_info)
+
+            val_epoch += 1
 
             if crt_epoch % save_report_freq == 0:
                 report.save()
 
-        report.finished_training_task()
+        report.save()
+
+        report.finished_training_task(train_task_idx+1, seen)
 
     report.save()
