@@ -53,7 +53,7 @@ def train(train_loader: Iterator[Batch], max_batch: int, model: nn.Module,
     return losses.avg, correct_cnt / float(seen), seen
 
 
-def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_freq: float = 0.1):
+def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_freq=.1):
     losses = AverageMeter()
     acc = AverageMeter()
     correct_cnt = 0
@@ -96,7 +96,7 @@ def train_simultaneously(model_class: Type,
     out_size = multitask.out_size
 
     train_loader = multitask.merged_tasks()
-    train_batch_cnt = multitask.get_merged_tasks_estimated_batches_cnt()
+    train_batch_cnt = multitask.merged_tasks_estimated_batches_cnt
 
     report = Reporting(args, multitask.get_task_info())
     save_report_freq = args.reporting.save_report_freq
@@ -117,7 +117,8 @@ def train_simultaneously(model_class: Type,
         seen += train_seen
 
         for task_idx, validate_loader in enumerate(multitask.test_tasks(no_tasks)):
-            val_loss, val_acc = validate(validate_loader, model, crt_epoch)
+            val_loss, val_acc = validate(
+                validate_loader, model, crt_epoch, report_freq=1)
 
             #  -- Reporting
             train_info = {"acc": train_acc, "loss": train_loss}

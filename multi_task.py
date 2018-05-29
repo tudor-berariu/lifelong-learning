@@ -1,5 +1,5 @@
 from copy import copy
-from typing import Iterator, List, NamedTuple, NewType, Optional, Tuple
+from typing import Iterator, List, NamedTuple, Optional, Tuple
 from argparse import Namespace
 from operator import mul
 from functools import reduce
@@ -13,16 +13,21 @@ from datasets import CLASSES_NO, InMemoryDataSet, DataSetFactory
 Batch = Tuple[Tensor, Tensor]
 
 
+def permute(batch: Tensor, permutation: Tensor) -> Tensor:
+    size = batch.size()
+    return batch.view(size[0], -1).index_select(1, permutation).view(size)
+
+
 class TaskDataLoader(object):
 
     def __init__(self,
                  name: str,
                  dataset: InMemoryDataSet,
-                 in_perm: Optional[Tensor] = None,
-                 out_perm: Optional[Tensor] = None,
-                 batch_size: int = 0,
-                 drop_last: bool = True,
-                 shuffle: bool = False) -> None:
+                 in_perm: Optional[Tensor]=None,
+                 out_perm: Optional[Tensor]=None,
+                 batch_size: int=0,
+                 drop_last: bool=True,
+                 shuffle: bool=False) -> None:
         self._name = name
         self.dataset = dataset
         self.__batch_size = batch_size if batch_size > 0 else len(dataset)
@@ -76,8 +81,12 @@ class TaskDataLoader(object):
             target = dataset.target.index_select(0, idxs)
         else:
             data = dataset.data[start_idx:end_idx]
-            # TODO CHECK IF CORRECT?!? (it was dataset.data)
             target = dataset.target[start_idx:end_idx]
+        if self.in_perm is not None:
+            data = permute(data, self.in_perm)
+        if self.out_perm is not None:
+            target = permute(target, self.out_perm)
+
         self.__start_idx = end_idx
         return data, target
 
@@ -100,7 +109,7 @@ Task = NamedTuple("Task",
 class MultiTask(object):
 
     def __init__(self, args: Args,
-                 device: torch.device = torch.device("cpu")) -> None:
+                 device: torch.device=torch.device("cpu")) -> None:
 
         datasets = args.tasks.datasets  # type: List[str]
         self._in_size = in_size = torch.Size(args.tasks.in_size)
@@ -111,7 +120,7 @@ class MultiTask(object):
         permute_targets = args.tasks.permute_targets  # type: bool
 
         self.batch_size = args.train.batch_size  # type: int
-        self.test_batch_size = args.train.test_batch_size # type: int
+        self.test_batch_size = args.train.test_batch_size  # type: int
         self.shuffle = args.train.shuffle  # type: bool
         self.drop_last = False
 
@@ -217,9 +226,7 @@ class MultiTask(object):
         return tasks_info
 
     def merged_tasks(self) -> Iterator[Batch]:
-        # TODO: combine batches from all loaders
         batch_size = self.batch_size // len(self)
-
         loaders = []
         for task in self._tasks:
             loaders.append(iter(TaskDataLoader(task.name, task.train_set,
@@ -259,7 +266,8 @@ class MultiTask(object):
             yield full_data, full_target
             loaders = new_loaders
 
-    def get_merged_tasks_estimated_batches_cnt(self):
+    @property
+    def merged_tasks_estimated_batches_cnt(self):
         sizes = []
         for task in self._tasks:
             sizes.append(len(task.train_set))

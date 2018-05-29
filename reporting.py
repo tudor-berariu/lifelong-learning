@@ -4,7 +4,6 @@ import numpy as np
 import torch
 import os
 import subprocess
-from comet_ml import Experiment
 from termcolor import colored as clr
 
 from my_types import Args, Tasks, Model, LongVector, DatasetTasks, Optional
@@ -31,11 +30,13 @@ class TensorboardSummary(object):
         :param path_to_save:
         :param auto_start_board: It will start a process that runs Tensorboard on current experiment
         """
-        self.save_path = save_path = os.path.join(path_to_save, "tensorboard_logs")
+        self.save_path = save_path = os.path.join(
+            path_to_save, "tensorboard_logs")
 
         if not os.path.exists(save_path):
             os.mkdir(save_path)
-        self._writer = SummaryWriter(log_dir=save_path, comment=experiment_name)
+        self._writer = SummaryWriter(
+            log_dir=save_path, comment=experiment_name)
 
         self.auto_start_board = auto_start_board
         self.board_started = False
@@ -91,7 +92,8 @@ class Reporting(object):
         self.task_idx_to_dataset = task_idx_to_name = dict({x["idx"]: x["dataset_name"]
                                                             for x in task_info})
         self.task_name = dict({x["idx"]: x["name"] for x in task_info})
-        self.dataset_task_idx = {d_n: [] for d_n in set(self.task_idx_to_dataset.values())}
+        self.dataset_task_idx = {d_n: []
+                                 for d_n in set(self.task_idx_to_dataset.values())}
 
         for idx, dataset_name in task_idx_to_name.items():
             self.dataset_task_idx[dataset_name].append(idx)
@@ -103,7 +105,7 @@ class Reporting(object):
 
         # Best Values
         self._best_eval = dict({task_idx: {"acc": {"value": -1, "seen": -1},
-                                          "loss": {"value": np.inf, "seen": -1}}
+                                           "loss": {"value": np.inf, "seen": -1}}
                                 for task_idx in task_idx_to_name.keys()})
 
         self._last_eval = dict({task_idx: {"acc": -1, "seen": -1, "loss":  np.inf}
@@ -115,18 +117,20 @@ class Reporting(object):
         if self.save_report_trace:
             self._save_variables.extend(["_train_trace", "_eval_trace"])
 
-        self.plot_t: TensorboardSummary = self._init_tensorboard() if self.use_tensorboard else None
+        self.plot_t: TensorboardSummary = self._init_tensorboard(
+        ) if self.use_tensorboard else None
         self.plot_c: Experiment = self._init_comet_ml() if self.use_comet else None
 
     def _init_tensorboard(self):
         # -- Tensorboard SummaryWriter
         plot_t = TensorboardSummary(
-                self.title, path_to_save=self.out_dir,
-                auto_start_board=self._args.reporting.tensorboard_auto_start
-            )
+            self.title, path_to_save=self.out_dir,
+            auto_start_board=self._args.reporting.tensorboard_auto_start
+        )
         return plot_t
 
     def _init_comet_ml(self):
+        from comet_ml import Experiment
         plot_c = Experiment(api_key="HWzTsfF0Wjk1t45c1T6q9BQMJ",
                             project_name="lifelong-learning",
                             team_name="nemodrivers",
