@@ -22,14 +22,14 @@ def train(train_loader: TaskDataLoader, model: nn.Module,
 
     model.train()
 
-    for batch_idx, (data, target) in enumerate(train_loader):
+    for batch_idx, (data, targets, head_idx) in enumerate(train_loader):
         optimizer.zero_grad()
-        output = model(data)
-        loss = functional.cross_entropy(output, target)
+        outputs = model(data, head_idx=head_idx)
+        loss = functional.cross_entropy(outputs[0], targets[0])
         loss.backward()
         optimizer.step()
 
-        (top1, correct), = accuracy(output, target)
+        (top1, correct), = accuracy(outputs[0], targets[0])
         correct_cnt += correct
 
         seen += data.size(0)
@@ -53,11 +53,11 @@ def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_fr
     model.eval()
 
     with torch.no_grad():
-        for batch_idx, (data, target) in enumerate(val_loader):
-            output = model(data)
-            loss = functional.cross_entropy(output, target)
+        for batch_idx, (data, targets, head_idx) in enumerate(val_loader):
+            outputs = model(data, head_idx=head_idx)
+            loss = functional.cross_entropy(outputs[0], targets[0])
 
-            (top1, correct), = accuracy(output, target)
+            (top1, correct), = accuracy(outputs[0], targets[0])
             correct_cnt += correct
 
             seen += data.size(0)
@@ -129,4 +129,3 @@ def train_individually(model_class: Type,
         report.finished_training_task(task_idx, seen)
 
     report.save()
-

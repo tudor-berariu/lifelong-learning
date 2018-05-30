@@ -1,8 +1,9 @@
-from typing import List
+from typing import List, Union
 from functools import reduce
 from operator import mul
 
 import torch
+from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as functional
 
@@ -31,18 +32,27 @@ class MLP(nn.Module):
         for out_size in out_sizes:
             self.heads.append(nn.Linear(in_units, out_size))
 
-    def forward(self, *xs: List[torch.Tensor], head_idx: int = 0) -> torch.Tensor:
+    def forward(self, *xs: List[torch.Tensor],
+                head_idx: Union[int, Tensor] = 0) -> List[Tensor]:
         x: torch.Tensor = xs[0]
 
         batch_size = x.size(0)
         x = x.view(batch_size, -1)
         x = self.fc(x)
-        output = self.heads[head_idx](x)
+        results = []  # type: List[Tensor]
+        if isinstance(head_idx, int):
+            results.append(self.heads[head_idx](x))
+        elif isinstance(head_idx, Tensor):
+            assert head_idx.size(0) == x.size(0)  # TODO: remove this
+            for task_idx in set(head_idx.tolist()):
+                results.append(self.heads[task_idx](
+                    x.index_select(0, head_idx == task_idx)))
+        else:
+            raise TypeError
 
         if self.use_softmax:
-            return functional.softmax(output, dim=-1)
-
-        return output
+            return [functional.softmax(y, dim=-1) for y in results]
+        return results
 
     @property
     def use_softmax(self):
