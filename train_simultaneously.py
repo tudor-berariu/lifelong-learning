@@ -53,7 +53,7 @@ def train_simultaneously(model_class: Type,
 
         for task_idx, validate_loader in enumerate(multitask.test_tasks(no_tasks)):
             val_loss, val_acc = standard_validate(
-                validate_loader, model, crt_epoch, report_freq=1)
+                validate_loader, model, crt_epoch)
 
             #  -- Reporting
             val_info = {"acc": val_acc, "loss": val_loss}

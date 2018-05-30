@@ -47,7 +47,7 @@ class MLP(nn.Module):
         elif isinstance(head_idx, Tensor):
             assert head_idx.size(0) == x.size(0)  # TODO: remove this
             for task_idx in set(head_idx.tolist()):
-                results.append(self.heads[task_idx](x.index_select(0, head_idx == task_idx)))
+                results.append(self.heads[task_idx](x[head_idx == task_idx]))
         else:
             raise TypeError
 
