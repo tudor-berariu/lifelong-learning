@@ -25,8 +25,9 @@ def train_simultaneously(model_class: Type,
     in_size = multitask.in_size
     out_size = multitask.out_size
 
+    no_tasks = len(multitask)
     train_loader = multitask.merged_tasks()
-    train_batch_cnt = multitask.average_batches_per_epoch
+    train_batch_cnt = int(multitask.average_batches_per_epoch / no_tasks)
     train_task_idx = 0
 
     # Initialize model & optim
@@ -38,9 +39,8 @@ def train_simultaneously(model_class: Type,
 
     seen = 0
     val_epoch = 0
-    no_tasks = len(multitask)
 
-    for crt_epoch in range(epochs_per_task):
+    for crt_epoch in range(epochs_per_task * no_tasks):
         # TODO Adjust optimizer learning rate
 
         train_loss, train_acc, train_seen = standard_train(train_loader, model, optimizer,
@@ -65,5 +65,7 @@ def train_simultaneously(model_class: Type,
 
         if crt_epoch % save_report_freq == 0:
             report.save()
+
+    report.finished_training_task(1, seen)
 
     report.save()

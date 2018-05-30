@@ -15,8 +15,6 @@ def train_sequentially(model_class: Type,
                        multitask: MultiTask,
                        args: Args)-> None:
 
-    print(os.path.basename(__file__))
-
     epochs_per_task = args.train.epochs_per_task
     model_params = args.model
     batch_report_freq = args.reporting.batch_report_freq
@@ -32,7 +30,8 @@ def train_sequentially(model_class: Type,
 
     train_tasks = multitask.train_tasks()
 
-    report = Reporting(args, multitask.get_task_info(), model=model)
+    report = Reporting(args, multitask.get_task_info(), model=model,
+                       files_to_save=[os.path.abspath(__file__)])
 
     save_report_freq = args.reporting.save_report_freq
     seen = 0
@@ -47,7 +46,6 @@ def train_sequentially(model_class: Type,
         val_epoch = 0
 
         for crt_epoch in range(epochs_per_task):
-
             train_loss, train_acc, _ = standard_train(train_loader, model, optimizer, crt_epoch,
                                                       report_freq=batch_report_freq)
             seen += len(train_loader)

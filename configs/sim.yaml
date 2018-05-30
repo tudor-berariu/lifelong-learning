@@ -1,0 +1,55 @@
+title: "test_multi"
+no_cuda: False
+mode: "sim"
+keep_alive: yes
+
+tasks:
+  datasets: ["mnist", "fashion"]
+  in_size: [3, 32, 32]
+  reset_targets: False
+  validation: 0
+  split: False
+  perms_no: 0
+  permute_targets: no
+  common_head: no
+
+model:
+  name: mlp
+  activation: &act "ReLU"
+  _conv: [["Conv2d", -1, 20, 5], ["MaxPool2d", 2], [*act,],
+          ["Conv2d", 20, 50, 5], ["MaxPool2d", 2], [*act,]]
+  hidden_units: [100, 100]
+  use_softmax: no
+
+lifelong:
+  mode: baseline
+  alpha: 0.25
+  scale: 100
+  g_norm: 2
+  is_signed: False
+  drop_misclassified: False
+  loss_norm: 2
+  do_sample: False
+  signed_on_cpu: True
+
+train:
+  batch_size: 1024
+  shuffle: True
+  epochs_per_task: 2
+  stop_if_not_better: 5
+  test_batch_size: 0
+  optimizer: Adam
+  optimizer_args: { lr: 0.001 }
+
+reporting:
+  min_save: no
+  eval_freq: 1
+  eval_not_trained: yes
+  save_report_freq: 5
+  save_report_trace: yes
+  batch_report_freq: 10
+  epoch_report_freq: 1
+  plot_tensorboard: yes
+  tensorboard_auto_start: yes
+  plot_comet: no
+  comet_plot_freq_factor: 0.1

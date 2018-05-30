@@ -50,7 +50,7 @@ class TaskDataLoader(object):
         elif part == "validation":
             self.dataset = task.validation_set
         elif part == "test":
-            self.dataset = task.test_setp
+            self.dataset = task.test_set
         self.__batch_size = batch_size if batch_size > 0 else len(self.dataset)
         self.drop_last = drop_last
         self.shuffle = shuffle
@@ -237,7 +237,7 @@ class MultiTask(object):
                                "head": task.head_idx})
         return tasks_info
 
-    def merged_tasks(self) -> Iterator[Tuple[Batch]]:
+    def merged_tasks(self) -> Iterator[Batch]:
         batch_size = self.batch_size // len(self)
         loaders = []
         kwargs = {"drop_last": self.drop_last, "batch_size": batch_size, "shuffle": self.shuffle}

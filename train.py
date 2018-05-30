@@ -106,11 +106,11 @@ def main(args: Args):
 
             # Reset necessary (remove out directory)
             rmtree(args.out_dir)
-
-            # Reload modules (not recommended)
-            importlib.reload(train_individually)
-            importlib.reload(train_simultaneously)
-            importlib.reload(train_sequentially)
+            #
+            # # Reload modules (not recommended)
+            # importlib.reload(train_individually)
+            # importlib.reload(train_simultaneously)
+            # importlib.reload(train_sequentially)
 
 
 if __name__ == "__main__":

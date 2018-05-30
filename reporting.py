@@ -6,6 +6,7 @@ import os
 import subprocess
 from termcolor import colored as clr
 from torch import nn
+from shutil import copyfile
 
 from my_types import Args
 
@@ -46,7 +47,7 @@ class TensorboardSummary(object):
         :param data: plot_name, metric_dict, step
         Example:
             [
-            "acc", {dataset_1: 33.3, dataset_3: 44.4}, 3
+            "mnist_p0/acc", {dataset_1: 33.3, dataset_3: 44.4}, 3
             "loss", {dataset_1: 0.123, dataset_3: 0.33}, 3
             ]
         """
@@ -81,7 +82,9 @@ class TensorboardSummary(object):
 
 class Reporting(object):
 
-    def __init__(self, args: Args, task_info: List[Dict], model: nn.Module = None):
+    def __init__(self, args: Args, task_info: List[Dict], model: nn.Module = None,
+                 files_to_save: List[str] = []):
+
         self._args = args
         self._task_info = task_info
 
@@ -92,10 +95,17 @@ class Reporting(object):
         self.use_tensorboard = args.reporting.plot_tensorboard
         self.use_comet = args.reporting.plot_comet
         self.save_report_trace = args.reporting.save_report_trace
+        self.min_save = min_save = args.reporting.min_save
 
         # Register model summary
         self._model_summary = None
         self.register_model(model)
+
+        # Copy files files_to_save
+        if not min_save:
+            for file_path in files_to_save:
+                copyfile(file_path, os.path.join(self.out_dir,
+                                                 f"script_{os.path.basename(file_path)}"))
 
         # Should read baseline for each task (individual/ simultanous)
         self.task_base_ind = dict({x["idx"]: x["best_individual"] for x in task_info})
@@ -140,7 +150,6 @@ class Reporting(object):
             "score_all_all": -1,
         })
 
-
         # The following variables will be saved in a dictionary
         self._save_variables = ["_start_time", "_args",
                                 "_best_eval", "_last_eval", "_task_info", "_task_train_tick",
@@ -150,7 +159,7 @@ class Reporting(object):
 
         # Plot data
         self.plot_t: TensorboardSummary = self._init_tensorboard(
-        ) if self.use_tensorboard else None
+        ) if self.use_tensorboard and not min_save else None
         # self.plot_c: Experiment = self._init_comet_ml() if self.use_comet else None
         self.plot_c = None
 
@@ -163,6 +172,9 @@ class Reporting(object):
         return plot_t
 
     def register_model(self, model: nn.Module):
+        if self.min_save:
+            return
+
         if self._model_summary:
             op = "a"
         else:
@@ -181,7 +193,7 @@ class Reporting(object):
 
     @property
     def tb(self):
-        return self.plot_t.tb
+        return self.plot_t
 
     def _init_comet_ml(self):
         from comet_ml import Experiment
