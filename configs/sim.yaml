@@ -1,5 +1,5 @@
 title: "test_multi"
-no_cuda: False
+no_cuda: yes
 mode: "sim"
 keep_alive: yes
 

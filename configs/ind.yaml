@@ -9,7 +9,7 @@ tasks:
   reset_targets: False
   validation: 0
   split: False
-  perms_no: 5
+  perms_no: 0
   permute_targets: no
   common_head: yes
 
