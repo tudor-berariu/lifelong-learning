@@ -26,7 +26,7 @@ def train_simultaneously(model_class: Type,
     out_size = multitask.out_size
 
     train_loader = multitask.merged_tasks()
-    train_batch_cnt = multitask.merged_tasks_estimated_batches_cnt
+    train_batch_cnt = multitask.average_batches_per_epoch
     train_task_idx = 0
 
     # Initialize model & optim
