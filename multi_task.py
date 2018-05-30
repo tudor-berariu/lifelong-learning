@@ -234,7 +234,7 @@ class MultiTask(object):
                                "name": task.name,
                                "best_individual": 1.,
                                "best_simultaneous": 1.,
-                               "head": task.head})
+                               "head": task.head_idx})
         return tasks_info
 
     def merged_tasks(self) -> Iterator[Tuple[Batch]]:
