@@ -1,4 +1,5 @@
 import torch
+from torch import Tensor
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as functional
@@ -17,7 +18,8 @@ from utils import AverageMeter, accuracy
 from reporting import Reporting
 
 
-def train(train_loader: Iterator[Batch], max_batch: int, model: nn.Module,
+def train(train_loader: Iterator[Batch, Tensor],
+          max_batch: int, model: nn.Module,
           optimizer: torch.optim.Optimizer,
           epoch: int, report_freq: int = -1)-> Tuple[int, int, int]:
 
@@ -28,17 +30,20 @@ def train(train_loader: Iterator[Batch], max_batch: int, model: nn.Module,
 
     model.train()
 
-    for batch_idx, (data, target) in enumerate(train_loader):
+    for batch_idx, (data, targets, head_idx) in enumerate(train_loader):
         if batch_idx >= max_batch:
             break
 
         optimizer.zero_grad()
-        output = model(data)
-        loss = functional.cross_entropy(output, target)
+        outputs = model(data, head_idx=head_idx)
+        loss = torch.zeros(1)
+        for output, target in zip(outputs, targets):
+            loss += functional.cross_entropy(outputs[0], targets[0])
         loss.backward()
         optimizer.step()
 
-        (top1, correct), = accuracy(output, target)
+        [(top1, correct)] = accuracy(outputs, targets)
+
         correct_cnt += correct
 
         seen += data.size(0)
@@ -62,11 +67,14 @@ def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_fr
     model.eval()
 
     with torch.no_grad():
-        for batch_idx, (data, target) in enumerate(val_loader):
-            output = model(data)
-            loss = functional.cross_entropy(output, target)
+        for batch_idx, (data, targets, head_idx) in enumerate(val_loader):
+            outputs = model(data, head_idx=head_idx)
 
-            (top1, correct), = accuracy(output, target)
+            loss = torch.zeros(1)
+            for output, target in zip(outputs, targets):
+                loss = functional.cross_entropy(output, target)
+
+            (top1, correct), = accuracy(outputs, targets)
             correct_cnt += correct
 
             seen += data.size(0)
@@ -97,6 +105,7 @@ def train_simultaneously(model_class: Type,
 
     train_loader = multitask.merged_tasks()
     train_batch_cnt = multitask.merged_tasks_estimated_batches_cnt
+    train_task_idx = 0
 
     report = Reporting(args, multitask.get_task_info())
     save_report_freq = args.reporting.save_report_freq
@@ -117,10 +126,11 @@ def train_simultaneously(model_class: Type,
         seen += train_seen
 
         train_info = {"acc": train_acc, "loss": train_loss}
-        report.trace_train(seen, task_idx, crt_epoch, train_info)
+        report.trace_train(seen, train_task_idx, crt_epoch, train_info)
 
         for task_idx, validate_loader in enumerate(multitask.test_tasks(no_tasks)):
-            val_loss, val_acc = validate(validate_loader, model, crt_epoch, report_freq=1)
+            val_loss, val_acc = validate(
+                validate_loader, model, crt_epoch, report_freq=1)
 
             #  -- Reporting
             val_info = {"acc": val_acc, "loss": val_loss}

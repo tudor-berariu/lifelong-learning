@@ -1,8 +1,9 @@
+from typing import List, Union
 import torch
 import torch.nn as nn
-from typing import List
-import numpy as np
 import torch.nn.functional as functional
+from torch import Tensor
+import numpy as np
 
 
 class LeNet(nn.Module):
@@ -38,10 +39,10 @@ class LeNet(nn.Module):
 
     @staticmethod
     def get_flat_fts(in_size: torch.Size, fts: nn.Module) -> int:
-        f = fts(torch.ones(1,*in_size))
+        f = fts(torch.ones(1, *in_size))
         return int(np.prod(f.size()[1:]))
 
-    def forward(self, *xs: List[torch.Tensor], head_idx: int = 0) -> torch.Tensor:
+    def forward(self, *xs: List[Tensor], head_idx: Union[int, Tensor] = 0) -> List[Tensor]:
         x: torch.Tensor = xs[0]
         batch_size = x.size(0)
 
@@ -50,12 +51,21 @@ class LeNet(nn.Module):
 
         x = self.fc(x)
 
-        output = self.heads[head_idx](x)
+        results = []  # type: List[Tensor]
+        if isinstance(head_idx, int):
+            results.append(self.heads[head_idx](x))
+        elif isinstance(head_idx, Tensor):
+            assert head_idx.size(0) == x.size(0)
+            for task_idx in set(head_idx.tolist()):
+                results.append(self.heads[task_idx](
+                    x.index_select(0, head_idx == task_idx)))
+        else:
+            raise TypeError
 
         if self.use_softmax:
-            return functional.softmax(output, dim=-1)
+            return [functional.softmax(y, dim=-1) for y in results]
 
-        return output
+        return results
 
     @property
     def use_softmax(self):
