@@ -121,7 +121,7 @@ class TaskDataLoader(object):
 class MultiTask(object):
 
     def __init__(self, args: Args,
-                 device: torch.device=torch.device("cpu")) -> None:
+                 device: torch.device = torch.device("cpu")) -> None:
 
         datasets = args.tasks.datasets  # type: List[str]
         self._in_size = in_size = torch.Size(args.tasks.in_size)
@@ -240,11 +240,11 @@ class MultiTask(object):
     def merged_tasks(self) -> Iterator[Tuple[Batch]]:
         batch_size = self.batch_size // len(self)
         loaders = []
+        kwargs = {"drop_last": self.drop_last, "batch_size": batch_size, "shuffle": self.shuffle}
+
         for task in self._tasks:
-            loaders.append(iter(TaskDataLoader(task, "train",
-                                               batch_size=batch_size,
-                                               drop_last=self.drop_last,
-                                               shuffle=self.shuffle)))
+            loaders.append(iter(TaskDataLoader(task, "train", **kwargs)))
+
         while True:
             inputs: List[Tensor] = []
             targets: List[Tensor] = []
@@ -256,11 +256,7 @@ class MultiTask(object):
                     (data, target, head) = next(loader)
                     new_loaders.append(loader)
                 except StopIteration:
-                    new_iter = iter(TaskDataLoader(task, "train",
-                                                   batch_size=batch_size,
-                                                   drop_last=self.drop_last,
-                                                   shuffle=self.shuffle))
-
+                    new_iter = iter(TaskDataLoader(task, "train", **kwargs))
                     (data, target, head) = next(new_iter)
                     new_loaders.append(new_iter)
                 inputs.append(data)
@@ -275,7 +271,7 @@ class MultiTask(object):
                 full_data = torch.cat(inputs, dim=0)
                 if self.common_head:
                     full_target = [torch.cat(targets, dim=0)]
-                    full_heads = [full_target[0].clone().fill_(0)]
+                    full_heads = full_target[0].clone().fill_(0)
                 else:
                     full_target = targets
                     full_heads = torch.cat(heads, dim=0)
