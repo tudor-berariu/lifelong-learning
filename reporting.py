@@ -345,14 +345,17 @@ class Reporting(object):
         score_base_s = self.norm_scores(eval_metrics["score_base_raw"], base_ordered)
         score_all_s = eval_metrics["score_all_last_raw"]
 
-        eval_metrics["score_new"] = score_new = np.mean(score_new_s)
-        eval_metrics["score_base"] = score_base = np.mean(score_base_s)
-        eval_metrics["score_all"] = score_all = np.mean(score_all_s)
+        scores = self.calc_scores(eval_metrics, base)
+        eval_metrics.update(scores)
+
+        score_new = eval_metrics["score_new"]
+        score_base = eval_metrics["score_base"]
+        score_all = eval_metrics["score_all"]
 
         def l_msg(ls: List[float]):
             return "".join([f"{x:3.6f}   " for x in ls])
 
-        idx = no_trained_tasks -1
+        idx = no_trained_tasks - 1
         print(f"\t[{idx:3}] score New's  (n):   [{score_new:3.6f}]    [{l_msg(score_new_s)}]")
         print(f"\t[{idx:3}] score Base's (n):   [{score_base:3.6f}]    [{l_msg(score_base_s)}")
         print(f"\t[{idx:3}] score All's  (n):   [{score_all:3.6f}]    [{l_msg(score_all_s)}]")
@@ -363,11 +366,7 @@ class Reporting(object):
         if mode == "seq":
             if plot_t:
                 plot_t.tick([("global/average", eval_data["global_avg"], no_trained_tasks)])
-                plot_t.tick([("global/average", {
-                    "score_new": score_new,
-                    "score_base": score_base,
-                    "score_all": score_all,
-                }, no_trained_tasks)])
+                plot_t.tick([("global/average", scores, no_trained_tasks)])
 
                 # Draw vertical line
                 plot_t.tick([("global/multi", {f"marker_{task_idx}": 0}, seen)])
@@ -376,6 +375,32 @@ class Reporting(object):
     @staticmethod
     def norm_scores(scores: List[float], base: List[float]):
         return [s / b for s, b in zip(scores, base)]
+
+    @staticmethod
+    def calc_scores(scores: Dict, base_scores: Dict):
+        score_new_raw = scores["score_new_raw"]
+        score_base_raw = scores["score_base_raw"]
+        score_all_raw = scores["score_all_raw"]
+        no_tasks = len(score_new_raw)
+
+        score_new, score_base, score_all = 0, 0, []
+        for ix in range(no_tasks):
+            score_new += score_new_raw / base_scores[ix]
+            score_base += score_base_raw / base_scores[ix]
+            score_all.append(np.mean([v / base_scores[i] for i, v in enumerate(score_all_raw)]))
+
+        score_new = score_new / float(no_tasks)
+        score_base = score_base / float(no_tasks)
+        score_last = score_all[-1]
+        score_all = np.mean(score_all)
+
+        scores = {
+            "score_new": score_new,
+            "score_base": score_base,
+            "score_all": score_all,
+            "score_last": score_last
+        }
+        return scores
 
     @property
     def get_dataset_avg(self) -> Dict:
