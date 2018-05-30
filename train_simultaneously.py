@@ -29,12 +29,12 @@ def train_simultaneously(model_class: Type,
     train_batch_cnt = multitask.merged_tasks_estimated_batches_cnt
     train_task_idx = 0
 
-    report = Reporting(args, multitask.get_task_info())
-    save_report_freq = args.reporting.save_report_freq
-
     # Initialize model & optim
     model: nn.Module = model_class(model_params, in_size, out_size)
     optimizer = get_optimizer(model.parameters())
+
+    report = Reporting(args, multitask.get_task_info(), model=model)
+    save_report_freq = args.reporting.save_report_freq
 
     seen = 0
     val_epoch = 0

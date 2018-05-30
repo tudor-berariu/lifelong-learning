@@ -40,6 +40,8 @@ def train_individually(model_class: Type,
         model: nn.Module = model_class(model_params, in_size, out_size)
         optimizer = get_optimizer(model.parameters())
 
+        report.register_model(model)
+
         seen = 0
         val_epoch = 0
 
