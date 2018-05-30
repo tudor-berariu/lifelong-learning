@@ -9,7 +9,7 @@ tasks:
   reset_targets: False
   validation: .2
   split: False
-  perms_no: 0
+  perms_no: 5
   permute_targets: no
 
 model:
@@ -29,9 +29,9 @@ lifelong:
   signed_on_cpu: True
 
 train:
-  batch_size: 256
+  batch_size: 1024
   shuffle: True
-  epochs_per_task: 100
+  epochs_per_task: 5
   stop_if_not_better: 5
   test_batch_size: 0
   optimizer: Adam
@@ -39,6 +39,7 @@ train:
 
 reporting:
   eval_freq: 1
+  eval_not_trained: yes
   save_report_freq: 5
   save_report_trace: yes
   batch_report_freq: 10

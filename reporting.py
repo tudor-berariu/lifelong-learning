@@ -385,9 +385,9 @@ class Reporting(object):
 
         score_new, score_base, score_all = 0, 0, []
         for ix in range(no_tasks):
-            score_new += score_new_raw / base_scores[ix]
-            score_base += score_base_raw / base_scores[ix]
-            score_all.append(np.mean([v / base_scores[i] for i, v in enumerate(score_all_raw)]))
+            score_new += score_new_raw[ix] / base_scores[ix]
+            score_base += score_base_raw[ix] / base_scores[ix]
+            score_all.append(np.mean([v / base_scores[i] for i, v in enumerate(score_all_raw[ix])]))
 
         score_new = score_new / float(no_tasks)
         score_base = score_base / float(no_tasks)
