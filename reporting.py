@@ -282,6 +282,9 @@ class Reporting(object):
         return new_best_acc, new_best_loss
 
     def finished_training_task(self, no_trained_tasks: int, seen: int) -> None:
+        print(f"Finished training {clr(f'{no_trained_tasks}', attrs=['bold']):s}"
+              f"\t seen: {seen} images")
+
         last_eval = self._last_eval
         task_train_tick = self._task_train_tick
 
