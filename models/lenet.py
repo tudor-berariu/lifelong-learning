@@ -15,21 +15,24 @@ class LeNet(nn.Module):
 
         self.__use_softmax: bool = cfg.use_softmax
         hidden_units: List[int] = cfg.hidden_units
+        feat_def = cfg._conv
+        activation = getattr(nn, cfg.activation)
 
-        self.features = nn.Sequential(
-            nn.Conv2d(3, 20, 5),
-            nn.MaxPool2d(2),
-            nn.ReLU(),
-            nn.Conv2d(20, 50, 5),
-            nn.MaxPool2d(2),
-            nn.ReLU()
-        )
+        features = []
+        in_conv = in_size[0]
+        for feat in feat_def:
+            if len(feat) > 1:
+                if feat[1] == -1:
+                    feat[1] = in_conv
+            features.append(getattr(nn, feat[0])(*feat[1:]))
+
+        self.features = nn.Sequential(*features)
 
         in_units = self.get_flat_fts(in_size, self.features)
         hidden_layers = []
         for hidden_size in hidden_units:
             hidden_layers.append(nn.Linear(in_units, hidden_size))
-            hidden_layers.append(nn.ReLU())
+            hidden_layers.append(activation())
             in_units = hidden_size
         self.fc = nn.Sequential(*hidden_layers)
 
@@ -57,8 +60,7 @@ class LeNet(nn.Module):
         elif isinstance(head_idx, Tensor):
             assert head_idx.size(0) == x.size(0)
             for task_idx in set(head_idx.tolist()):
-                results.append(self.heads[task_idx](
-                    x.index_select(0, head_idx == task_idx)))
+                results.append(self.heads[task_idx](x.index_select(0, head_idx == task_idx)))
         else:
             raise TypeError
 

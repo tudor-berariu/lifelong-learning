@@ -5,9 +5,9 @@ import torch
 import os
 import subprocess
 from termcolor import colored as clr
+from torch import nn
 
-from my_types import Args, Tasks, Model, LongVector, DatasetTasks, Optional
-from multi_task import MultiTask
+from my_types import Args
 
 Accuracy = float
 Loss = float
@@ -81,17 +81,21 @@ class TensorboardSummary(object):
 
 class Reporting(object):
 
-    def __init__(self, args: Args, task_info: List[Dict]):
+    def __init__(self, args: Args, task_info: List[Dict], model: nn.Module = None):
         self._args = args
         self._task_info = task_info
 
         self.title = args.title
-        self._save_path = os.path.join(args.out_dir, 'reporting')
+        self._save_path = os.path.join(args.out_dir, 'reporting.pkl')
         self.out_dir = args.out_dir
         self.mode = args.mode
         self.use_tensorboard = args.reporting.plot_tensorboard
         self.use_comet = args.reporting.plot_comet
         self.save_report_trace = args.reporting.save_report_trace
+
+        # Register model summary
+        self._model_summary = None
+        self.register_model(model)
 
         # Should read baseline for each task (individual/ simultanous)
         self.task_base_ind = dict({x["idx"]: x["best_individual"] for x in task_info})
@@ -140,7 +144,7 @@ class Reporting(object):
         # The following variables will be saved in a dictionary
         self._save_variables = ["_start_time", "_args",
                                 "_best_eval", "_last_eval", "_task_info", "_task_train_tick",
-                                "_eval_metrics"]
+                                "_eval_metrics", "_model_summary"]
         if self.save_report_trace:
             self._save_variables.extend(["_train_trace", "_eval_trace"])
 
@@ -157,6 +161,23 @@ class Reporting(object):
             auto_start_board=self._args.reporting.tensorboard_auto_start
         )
         return plot_t
+
+    def register_model(self, model: nn.Module):
+        if self._model_summary:
+            op = "a"
+        else:
+            self._model_summary = []
+            op = "w"
+
+        self._model_summary.append(model.__str__() if model else None)
+
+        with open(os.path.join(self.out_dir, "model_summary"), op) as f:
+            s = "=" * 40 + f"{len(self._model_summary):4}   " + "=" * 40 + "\n"
+            f.writelines([s, "\n"])
+            f.write(str(self._model_summary[-1]))
+            f.writelines(["\n", "\n"])
+
+
 
     @property
     def tb(self):
@@ -282,6 +303,11 @@ class Reporting(object):
         return new_best_acc, new_best_loss
 
     def finished_training_task(self, no_trained_tasks: int, seen: int) -> None:
+        print(''.join("" * 79))
+
+        print(f"Finished training {clr(f'{no_trained_tasks}', attrs=['bold']):s}"
+              f"\t seen: {seen} images")
+
         last_eval = self._last_eval
         task_train_tick = self._task_train_tick
 
@@ -371,6 +397,8 @@ class Reporting(object):
                 # Draw vertical line
                 plot_t.tick([("global/multi", {f"marker_{task_idx}": 0}, seen)])
                 plot_t.tick([("global/multi", {f"marker_{task_idx}": self.no_tasks+1}, seen)])
+
+        print(''.join("" * 79))
 
     @staticmethod
     def norm_scores(scores: List[float], base: List[float]):

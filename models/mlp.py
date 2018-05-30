@@ -18,12 +18,13 @@ class MLP(nn.Module):
 
         self.__use_softmax: bool = cfg.use_softmax
         hidden_units: List[int] = cfg.hidden_units
+        activation = getattr(nn, cfg.activation)
 
         in_units = reduce(mul, in_size, 1)
         hidden_layers = []
         for hidden_size in hidden_units:
             hidden_layers.append(nn.Linear(in_units, hidden_size))
-            hidden_layers.append(nn.ReLU())
+            hidden_layers.append(activation())
             in_units = hidden_size
 
         self.fc = nn.Sequential(*hidden_layers)
@@ -39,19 +40,20 @@ class MLP(nn.Module):
         batch_size = x.size(0)
         x = x.view(batch_size, -1)
         x = self.fc(x)
+
         results = []  # type: List[Tensor]
         if isinstance(head_idx, int):
             results.append(self.heads[head_idx](x))
         elif isinstance(head_idx, Tensor):
             assert head_idx.size(0) == x.size(0)  # TODO: remove this
             for task_idx in set(head_idx.tolist()):
-                results.append(self.heads[task_idx](
-                    x.index_select(0, head_idx == task_idx)))
+                results.append(self.heads[task_idx](x.index_select(0, head_idx == task_idx)))
         else:
             raise TypeError
 
         if self.use_softmax:
             return [functional.softmax(y, dim=-1) for y in results]
+
         return results
 
     @property
