@@ -1,6 +1,7 @@
 import torch.nn as nn
 import torch.optim as optim
 from typing import Type, Callable
+import os
 
 # Project imports
 from my_types import Args
@@ -13,6 +14,8 @@ def train_sequentially(model_class: Type,
                        get_optimizer: Callable[[nn.Module], optim.Optimizer],
                        multitask: MultiTask,
                        args: Args)-> None:
+
+    print(os.path.basename(__file__))
 
     epochs_per_task = args.train.epochs_per_task
     model_params = args.model

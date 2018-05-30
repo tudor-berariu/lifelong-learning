@@ -49,10 +49,12 @@ def accuracy(outputs: List[Tensor], targets: List[Tensor], topk=(1,)) -> List[Tu
 
         final_res = []
         for k in topk:
+            k -= 1
             batch_size = np.sum([r[k][1] for r in res])
-            acc = np.sum([r[k][0] for r in res]) / batch_size
-            final_res.append((acc * (100. / float(batch_size)), batch_size))
-        return res
+            correct = np.sum([r[k][0] for r in res])
+            acc = correct / float(batch_size)
+            final_res.append((acc * 100, correct))
+        return final_res
 
 
 def standard_train(train_loader: Union[TaskDataLoader, Iterator[Batch]], model: nn.Module,

@@ -67,6 +67,6 @@ def train_individually(model_class: Type,
             if crt_epoch % save_report_freq == 0:
                 report.save()
 
-        report.finished_training_task(task_idx, seen)
+        report.finished_training_task(task_idx+1, seen)
 
     report.save()
