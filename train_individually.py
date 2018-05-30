@@ -1,75 +1,14 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as functional
 import torch.optim as optim
 from typing import Type, Callable, Tuple
 from termcolor import colored as clr
 
 # Project imports
 from my_types import Args
-from multi_task import MultiTask, TaskDataLoader
-from utils import AverageMeter, accuracy
+from multi_task import MultiTask
+from utils import standard_train, standard_validate
 from reporting import Reporting
-
-
-def train(train_loader: TaskDataLoader, model: nn.Module,
-          optimizer: torch.optim.Optimizer, epoch: int, report_freq: int = -1)-> Tuple[int, int]:
-
-    losses = AverageMeter()
-    acc = AverageMeter()
-    correct_cnt = 0
-    seen = 0.
-
-    model.train()
-
-    for batch_idx, (data, targets, head_idx) in enumerate(train_loader):
-        optimizer.zero_grad()
-        outputs = model(data, head_idx=head_idx)
-        loss = functional.cross_entropy(outputs[0], targets[0])
-        loss.backward()
-        optimizer.step()
-
-        (top1, correct), = accuracy(outputs[0], targets[0])
-        correct_cnt += correct
-
-        seen += data.size(0)
-        acc.update(top1, data.size(0))
-        losses.update(loss.item(), data.size(0))
-
-        if (batch_idx + 1) % report_freq == 0 and report_freq > 0:
-            print(f'\t\t[Train] [Epoch: {epoch:3}] [Batch: {batch_idx:5}]:\t '
-                  f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
-                  f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
-
-    return losses.avg, correct_cnt / float(seen)
-
-
-def validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int, report_freq: int = -1):
-    losses = AverageMeter()
-    acc = AverageMeter()
-    correct_cnt = 0
-    seen = 0
-
-    model.eval()
-
-    with torch.no_grad():
-        for batch_idx, (data, targets, head_idx) in enumerate(val_loader):
-            outputs = model(data, head_idx=head_idx)
-            loss = functional.cross_entropy(outputs[0], targets[0])
-
-            (top1, correct), = accuracy(outputs[0], targets[0])
-            correct_cnt += correct
-
-            seen += data.size(0)
-            acc.update(top1, data.size(0))
-            losses.update(loss.item(), data.size(0))
-
-            if (batch_idx + 1) % report_freq == 0 and report_freq > 0:
-                print(f'\t\t[Eval] [Epoch: {epoch:3}] [Batch: {batch_idx:5}]:\t '
-                      f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
-                      f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
-
-        return losses.avg, correct_cnt / float(seen)
 
 
 def train_individually(model_class: Type,
@@ -108,11 +47,11 @@ def train_individually(model_class: Type,
 
             # TODO Adjust optimizer learning rate
 
-            train_loss, train_acc = train(train_loader, model, optimizer, crt_epoch,
-                                          report_freq=batch_report_freq)
+            train_loss, train_acc, _ = standard_train(train_loader, model, optimizer, crt_epoch,
+                                                      report_freq=batch_report_freq)
             seen += len(train_loader)
 
-            val_loss, val_acc = validate(validate_loader, model, crt_epoch)
+            val_loss, val_acc = standard_validate(validate_loader, model, crt_epoch)
             val_epoch += 1
 
             #  -- Reporting
