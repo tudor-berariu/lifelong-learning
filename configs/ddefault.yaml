@@ -11,6 +11,7 @@ tasks:
   split: False
   perms_no: 5
   permute_targets: no
+  common_head: no
 
 model:
   name: mlp

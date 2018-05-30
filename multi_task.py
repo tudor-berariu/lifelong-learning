@@ -1,5 +1,5 @@
 from copy import copy
-from typing import Iterator, List, NamedTuple, Optional, Tuple
+from typing import Iterator, List, NamedTuple, Optional, Tuple, Union
 from argparse import Namespace
 from operator import mul
 from functools import reduce
@@ -10,7 +10,7 @@ from torch import Tensor
 from my_types import Args
 from datasets import CLASSES_NO, InMemoryDataSet, DataSetFactory
 
-Batch = Tuple[Tensor, Tensor]
+Batch = Tuple[Tensor, List[Tensor], Union[int, Tensor]]
 
 
 def permute(batch: Tensor, permutation: Tensor) -> Tensor:
@@ -18,29 +18,48 @@ def permute(batch: Tensor, permutation: Tensor) -> Tensor:
     return batch.view(size[0], -1).index_select(1, permutation).view(size)
 
 
+def permute_targets(batch: Tensor, permutation: Tensor):
+    return permutation[batch]
+
+
+Task = NamedTuple("Task",
+                  [("name", str),
+                   ("train_set", InMemoryDataSet),
+                   ("validation_set", Optional[InMemoryDataSet]),
+                   ("test_set", InMemoryDataSet),
+                   ("dataset_name", str),
+                   ("classes", Optional[List[int]]),
+                   ("p_idx", Optional[int]),
+                   ("in_permutation", Optional[Tensor]),
+                   ("out_permutation", Optional[Tensor]),
+                   ("head_idx", int)])
+
+
 class TaskDataLoader(object):
 
     def __init__(self,
-                 name: str,
-                 dataset: InMemoryDataSet,
-                 in_perm: Optional[Tensor]=None,
-                 out_perm: Optional[Tensor]=None,
-                 batch_size: int=0,
-                 drop_last: bool=True,
-                 shuffle: bool=False) -> None:
-        self._name = name
-        self.dataset = dataset
-        self.__batch_size = batch_size if batch_size > 0 else len(dataset)
+                 task: Task,
+                 part: str = "train",
+                 batch_size: int = 0,
+                 drop_last: bool = False,
+                 shuffle: bool = False) -> None:
+
+        self._task = task
+        if part == "train":
+            self.dataset = task.train_set
+        elif part == "validation":
+            self.dataset = task.validation_set
+        elif part == "test":
+            self.dataset = task.test_setp
+        self.__batch_size = batch_size if batch_size > 0 else len(self.dataset)
         self.drop_last = drop_last
         self.shuffle = shuffle
-        self.in_perm = in_perm
-        self.out_perm = out_perm
         self.__sh_idx = None
         self.__start_idx = None
 
     @property
     def name(self) -> str:
-        return self._name
+        return self._task.name
 
     @property
     def batch_size(self) -> int:
@@ -53,6 +72,10 @@ class TaskDataLoader(object):
     def to_(self, device) -> None:
         # Warning: dataset might be shared by multiple tasks
         self.dataset.to_(device)
+        if self._task.in_permutation:
+            self._task.in_permutation = self._task.in_permutation.to(device)
+        if self._task.out_permutation:
+            self._task.out_permutation = self._task.out_permutation.to(device)
 
     def __iter__(self) -> Iterator[Batch]:
         if self.shuffle and self.batch_size < len(self.dataset):
@@ -82,28 +105,17 @@ class TaskDataLoader(object):
         else:
             data = dataset.data[start_idx:end_idx]
             target = dataset.target[start_idx:end_idx]
-        if self.in_perm is not None:
-            data = permute(data, self.in_perm)
-        if self.out_perm is not None:
-            target = permute(target, self.out_perm)
+        in_perm, out_perm = self._task.in_permutation, self._task.out_permutation
+        if in_perm is not None:
+            data = permute(data, in_perm)
+        if out_perm is not None:
+            target = permute_targets(target, out_perm)
 
         self.__start_idx = end_idx
-        return data, target
+        return data, [target], self._task.head_idx
 
     def __len__(self):
         return len(self.dataset)
-
-
-Task = NamedTuple("Task",
-                  [("name", str),
-                   ("train_set", InMemoryDataSet),
-                   ("validation_set", Optional[InMemoryDataSet]),
-                   ("test_set", InMemoryDataSet),
-                   ("dataset_name", str),
-                   ("classes", Optional[List[int]]),
-                   ("p_idx", Optional[int]),
-                   ("in_permutation", Optional[Tensor]),
-                   ("out_permutation", Optional[Tensor])])
 
 
 class MultiTask(object):
@@ -118,6 +130,7 @@ class MultiTask(object):
         split = args.tasks.split if args.tasks.split else 1
         perms_no = args.tasks.perms_no if args.tasks.perms_no else 1
         permute_targets = args.tasks.permute_targets  # type: bool
+        self.common_head = common_head = args.tasks.common_head  # type: bool
 
         self.batch_size = args.train.batch_size  # type: int
         self.test_batch_size = args.train.test_batch_size  # type: int
@@ -136,6 +149,7 @@ class MultiTask(object):
 
         factory = DataSetFactory(datasets, in_size)
 
+        head_idx = 0
         for dataset_name in datasets:
             classes_no = CLASSES_NO[dataset_name]  # type: int
             if split > 1:
@@ -156,16 +170,14 @@ class MultiTask(object):
                             assert not args.task.permute_targets, "Don't!"
                             out_perm = None
                             name = f"{dataset_name:s}_c{cls_name:s}_p{p_idx:d}"
-                            self._tasks.append(Task(name, trn_d, vld_d, tst_d,
-                                                    dataset_name, classes,
-                                                    p_idx, in_perm, out_perm))
+                            self._tasks.append(Task(name, trn_d, vld_d, tst_d, dataset_name, classes,
+                                                    p_idx, in_perm, out_perm, head_idx))
                             self._out_size.append(len(classes))
 
                     else:
                         name = f"{dataset_name:s}_c{cls_name:s}"
-                        self._tasks.append(Task(name, trn_d, vld_d, tst_d,
-                                                dataset_name, classes,
-                                                None, None, None))
+                        self._tasks.append(Task(name, trn_d, vld_d, tst_d, dataset_name, classes,
+                                                None, None, None, head_idx))
                         self._out_size.append(len(classes))
             else:
                 kwargs["classes"] = None
@@ -175,44 +187,41 @@ class MultiTask(object):
                     for p_idx in range(perms_no):
                         in_perm = torch.randperm(in_n).to(device)
                         if permute_targets:
-                            out_perm = torch.randperm(classes_no)
+                            out_perm = torch.randperm(classes_no).to(device)
                         else:
                             out_perm = None
                         name = f"{dataset_name:s}_p{p_idx:d}"
-                        self._tasks.append(Task(name, trn_d, vld_d, tst_d,
-                                                dataset_name, None,
-                                                p_idx, in_perm, out_perm))
+                        self._tasks.append(Task(name, trn_d, vld_d, tst_d, dataset_name, None,
+                                                p_idx, in_perm, out_perm, head_idx))
                         self._out_size.append(classes_no)
 
                 else:
-                    self._tasks.append(Task(dataset_name, trn_d, vld_d, tst_d,
-                                            dataset_name, None, None, None, None))
+                    self._tasks.append(Task(dataset_name, trn_d, vld_d, tst_d, dataset_name, None,
+                                            None, None, None, head_idx))
                     self._out_size.append(classes_no)
+            if not common_head:
+                head_idx += 1
 
     def __len__(self):
         return len(self._tasks)
 
     def train_tasks(self) -> Iterator[Tuple[TaskDataLoader, TaskDataLoader]]:
         for task in self._tasks:
-            tr_dl = TaskDataLoader(task.name, task.train_set,
-                                   task.in_permutation, task.out_permutation,
-                                   self.batch_size, self.drop_last,
-                                   self.shuffle)
-            snd = task.validation_set if task.validation_set else task.test_set
-            tst_dl = TaskDataLoader(task.name, snd,
-                                    task.in_permutation, task.out_permutation,
-                                    batch_size=self.test_batch_size)
-            yield (tr_dl, tst_dl)
+            train_dataloader = TaskDataLoader(task, "train", batch_size=self.batch_size,
+                                              drop_last=self.drop_last, shuffle=self.shuffle)
+            snd_part = "validation" if task.validation_set else "test"
+            test_dataloader = TaskDataLoader(
+                task.name, snd_part, batch_size=self.test_batch_size)
+            yield train_dataloader, test_dataloader
 
     def test_tasks(self, first_n: int = 0) -> Iterator[TaskDataLoader]:
         for idx, task in enumerate(self._tasks):
             if idx >= first_n:
                 break
-            dst = task.validation_set if task.validation_set else task.test_set
-            tst_dl = TaskDataLoader(task.name, dst,
-                                    task.in_permutation, task.out_permutation,
-                                    batch_size=self.test_batch_size)
-            yield tst_dl
+            snd_part = "validation" if task.validation_set else "test"
+            test_dataloader = TaskDataLoader(
+                task.name, snd_part, batch_size=self.test_batch_size)
+            yield test_dataloader
 
     def get_task_info(self):
         task: Task
@@ -224,52 +233,60 @@ class MultiTask(object):
                                "p_idx": task.p_idx,
                                "name": task.name,
                                "best_individual": 1.,
-                               "best_simultaneous": 1.})
+                               "best_simultaneous": 1.,
+                               "head": task.head})
         return tasks_info
 
-    def merged_tasks(self) -> Iterator[Batch]:
+    def merged_tasks(self) -> Iterator[Tuple[Batch]]:
         batch_size = self.batch_size // len(self)
         loaders = []
         for task in self._tasks:
-            loaders.append(iter(TaskDataLoader(task.name, task.train_set,
-                                               task.in_permutation,
-                                               task.out_permutation,
-                                               batch_size,
-                                               self.drop_last,
-                                               self.shuffle)))
+            loaders.append(iter(TaskDataLoader(task, "train",
+                                               batch_size=batch_size,
+                                               drop_last=self.drop_last,
+                                               shuffle=self.shuffle)))
         while True:
-            inputs: List[torch.Tensor] = []
-            targets: List[torch.Tensor] = []
-            new_loaders = []
-            for (loader, task) in zip(loaders, self._tasks):
+            inputs: List[Tensor] = []
+            targets: List[Tensor] = []
+            heads: List[Tensor] = []
 
+            new_loaders = []
+            for loader, task in zip(loaders, self._tasks):
                 try:
-                    (data, target) = next(loader)
+                    (data, target, head) = next(loader)
                     new_loaders.append(loader)
                 except StopIteration:
-                    new_iter = iter(TaskDataLoader(task.name, task.train_set,
-                                                   task.in_permutation,
-                                                   task.out_permutation,
-                                                   batch_size,
-                                                   self.drop_last,
-                                                   self.shuffle))
-                    (data, target) = next(new_iter)
+                    new_iter = iter(TaskDataLoader(task, "train",
+                                                   batch_size=batch_size,
+                                                   drop_last=self.drop_last,
+                                                   shuffle=self.shuffle))
+
+                    (data, target, head) = next(new_iter)
                     new_loaders.append(new_iter)
-            inputs.append(data)
-            targets.append(target)
-            full_data: torch.Tensor
-            full_target: torch.Tensor
+                inputs.append(data)
+                targets.extend(target)
+                heads.append(head)
+
+            full_data: Tensor
+            full_target: List[Tensor]
+            full_heads: Tensor
+
             if len(inputs) > 1:
                 full_data = torch.cat(inputs, dim=0)
-                full_target = torch.cat(targets, dim=0)
+                if self.common_head:
+                    full_target = [torch.cat(targets, dim=0)]
+                    full_heads = [full_target[0].clone().fill_(0)]
+                else:
+                    full_target = targets
+                    full_heads = torch.cat(heads, dim=0)
             else:
-                full_data, full_target = inputs[0], targets[0]
+                full_data, full_target, full_heads = inputs[0], targets, heads[0]
 
-            yield full_data, full_target
+            yield full_data, full_target, full_heads
             loaders = new_loaders
 
     @property
-    def merged_tasks_estimated_batches_cnt(self):
+    def average_batches_per_epoch(self):
         sizes = []
         for task in self._tasks:
             sizes.append(len(task.train_set))
@@ -291,6 +308,9 @@ class MultiTask(object):
         return copy(self._in_size)
 
 
+# ---------------------------------------------------------------------------
+# Testing
+
 def test_split():
     args = Namespace(
         tasks=Namespace(
@@ -307,13 +327,13 @@ def test_split():
             shuffle=True
         )
     )
-    mt = MultiTask(args, torch.device("cuda:0"))
-    for train_loader, valid_loader in mt.train_tasks():
+    multi_task = MultiTask(args, torch.device("cuda:0"))
+    for train_loader, valid_loader in multi_task.train_tasks():
         print(train_loader.name)
-        for x, y in train_loader:
-            print("new_batch")
-        for x, y in valid_loader:
-            print("new_batch")
+        for _inputs, _targets, _heads in train_loader:
+            pass
+        for _inputs, _targets, _heads in valid_loader:
+            pass
 
 
 def test_perms():
@@ -325,20 +345,21 @@ def test_perms():
             validation=.8,
             split=False,
             perms_no=3,
-            permute_targets=True
+            permute_targets=True,
+            common_head=False
         ),
         train=Namespace(
             batch_size=6000,
+            test_batch_size=5000,
             shuffle=True
         )
     )
-    mt = MultiTask(args, torch.device("cuda:0"))
-    for train_loader, valid_loader in mt.train_tasks():
-        print(train_loader.name)
-        for x, y in train_loader:
-            print("new_batch")
-        for x, y in valid_loader:
-            print("new_batch")
+    multi_task = MultiTask(args, torch.device("cuda:0"))
+    for train_loader, valid_loader in multi_task.train_tasks():
+        for _train_loader, _valid_loader, _heads in train_loader:
+            pass
+        for _train_loader, _valid_loader, _heads in valid_loader:
+            pass
 
 
 def test_simul():
@@ -350,20 +371,18 @@ def test_simul():
             validation=.8,
             split=False,
             perms_no=3,
-            permute_targets=True
+            permute_targets=True,
+            common_head=True
         ),
         train=Namespace(
             batch_size=6000,
+            test_batch_size=5000,
             shuffle=True
         )
     )
-    mt = MultiTask(args, torch.device("cuda:0"))
-    i = 0
-    for x, y in mt.merged_tasks():
-        print("*")
-        i += 1
-        if i > 1000:
-            break
+    multi_task = MultiTask(args, torch.device("cuda:0"))
+    for _inputs, _targets, _heads in multi_task.merged_tasks():
+        pass
 
 
 if __name__ == "__main__":
