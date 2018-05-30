@@ -1,5 +1,5 @@
 title: "test_multi"
-no_cuda: yes
+no_cuda: no
 mode: "sim"
 keep_alive: yes
 
@@ -9,7 +9,7 @@ tasks:
   reset_targets: False
   validation: 0
   split: False
-  perms_no: 0
+  perms_no: 5
   permute_targets: no
   common_head: no
 
@@ -50,6 +50,6 @@ reporting:
   batch_report_freq: 10
   epoch_report_freq: 1
   plot_tensorboard: yes
-  tensorboard_auto_start: yes
+  tensorboard_auto_start: no
   plot_comet: no
   comet_plot_freq_factor: 0.1

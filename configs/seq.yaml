@@ -6,10 +6,10 @@ keep_alive: yes
 tasks:
   datasets: ["mnist", "fashion"]
   in_size: [3, 32, 32]
-  reset_targets: False
+  reset_targets: no
   validation: 0
-  split: False
-  perms_no: 0
+  split: 2
+  perms_no: 2
   permute_targets: no
   common_head: yes
 

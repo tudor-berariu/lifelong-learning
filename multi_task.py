@@ -132,7 +132,6 @@ class MultiTask(object):
         permute_targets = args.tasks.permute_targets  # type: bool
         self.common_head = common_head = args.tasks.common_head  # type: bool
 
-
         self.batch_size = args.train.batch_size  # type: int
         self.test_batch_size = args.train.test_batch_size  # type: int
         self.shuffle = args.train.shuffle  # type: bool
@@ -168,12 +167,16 @@ class MultiTask(object):
                     if perms_no > 1:
                         for p_idx in range(perms_no):
                             in_perm = torch.randperm(in_n).to(device)
-                            assert not args.task.permute_targets, "Don't!"
+                            assert not args.tasks.permute_targets, "Don't!"
                             out_perm = None
                             name = f"{dataset_name:s}_c{cls_name:s}_p{p_idx:d}"
                             self._tasks.append(Task(name, trn_d, vld_d, tst_d, dataset_name, classes,
                                                     p_idx, in_perm, out_perm, head_idx))
                             self._out_size.append(len(classes))
+                            if not common_head:
+                                head_idx += 1
+                        if not common_head:
+                            head_idx -= 1
 
                     else:
                         name = f"{dataset_name:s}_c{cls_name:s}"
@@ -195,6 +198,11 @@ class MultiTask(object):
                         self._tasks.append(Task(name, trn_d, vld_d, tst_d, dataset_name, None,
                                                 p_idx, in_perm, out_perm, head_idx))
                         self._out_size.append(classes_no)
+
+                        if not common_head:
+                            head_idx += 1
+                    if not common_head:
+                        head_idx -= 1
 
                 else:
                     self._tasks.append(Task(dataset_name, trn_d, vld_d, tst_d, dataset_name, None,
@@ -262,7 +270,7 @@ class MultiTask(object):
                     new_loaders.append(new_iter)
                 inputs.append(data)
                 targets.extend(target)
-                heads.append(head)
+                heads.extend([t.clone().fill_(head) for t in target])
 
             full_data: Tensor
             full_target: List[Tensor]
