@@ -107,6 +107,11 @@ class Reporting(object):
         for idx, dataset_name in task_idx_to_name.items():
             self.dataset_task_idx[dataset_name].append(idx)
 
+        self._max_seen_train = -1
+        self._max_seen_eval = -1
+        self._trained_before_eval = []
+        self._has_evaluated = False
+
         self._start_time = time.time()
 
         self._train_trace = dict({})
@@ -121,8 +126,16 @@ class Reporting(object):
                                 for task_idx in task_idx_to_name.keys()})
 
         self._task_train_tick: List[Dict] = []
+        self._eval_metrics: Dict = dict({
+            "score_new_raw": [],
+            "score_base_raw": [],
+            "score_all_raw": [],
+            "score_all_last_raw": [],
+            "score_new": -1,
+            "score_base": -1,
+            "score_all_all": -1,
+        })
 
-        self._eval_metrics: Dict = dict({"score_new": [], "score_base": [], "score_all": []})
 
         # The following variables will be saved in a dictionary
         self._save_variables = ["_start_time", "_args",
@@ -162,6 +175,14 @@ class Reporting(object):
 
     def trace_train(self, seen_training: int, task_idx: int, train_epoch: int, info: dict):
         trace = self._train_trace
+        self._max_seen_train = seen_training
+
+        if self._has_evaluated:
+            self._has_evaluated = False
+            self._trained_before_eval.clear()
+
+        if task_idx not in self._trained_before_eval:
+            self._trained_before_eval.append(task_idx)
 
         if seen_training not in trace:
             trace[seen_training] = dict({})
@@ -191,7 +212,9 @@ class Reporting(object):
     def trace_eval(self, seen_training: int, task_idx: int, train_epoch: int, val_epoch: int,
                    info: dict) -> Tuple[bool, bool]:
 
+        self._has_evaluated = True
         trace = self._eval_trace
+        self._max_seen_eval = seen_training
 
         if seen_training not in trace:
             trace[seen_training] = dict({})
@@ -223,6 +246,7 @@ class Reporting(object):
             new_best_loss = True
 
         task_name = self.task_name[task_idx]
+        crt_training = task_idx in self._trained_before_eval
 
         # Plot for individual training
         # -- Plot per individual task
@@ -232,12 +256,16 @@ class Reporting(object):
             if plot_t:
                 plot_t.tick([(task_name, {f"loss_eval": loss, "acc_eval": acc}, train_epoch)])
 
-            self._show_task_result(train_epoch, task_name, acc, loss, new_best_acc, new_best_loss)
+            self._show_task_result(train_epoch, task_name, acc, loss,
+                                   new_best_acc, new_best_loss, crt_training)
+
         elif mode == "sim":
             if plot_t:
                 plot_t.tick([(task_name, {f"loss_eval": loss, "acc_eval": acc}, train_epoch)])
 
-            self._show_task_result(train_epoch, task_name, acc, loss, new_best_acc, new_best_loss)
+            self._show_task_result(train_epoch, task_name, acc, loss, new_best_acc,
+                                   new_best_loss, crt_training)
+
         elif mode == "seq":
             no_tasks = self.no_tasks
             if plot_t:
@@ -248,7 +276,8 @@ class Reporting(object):
                                f"{task_name}_acc_eval": level + acc},
                               seen_training)])
 
-            self._show_task_result(train_epoch, task_name, acc, loss, new_best_acc, new_best_loss)
+            self._show_task_result(train_epoch, task_name, acc, loss,
+                                   new_best_acc, new_best_loss, crt_training)
 
         return new_best_acc, new_best_loss
 
@@ -294,21 +323,39 @@ class Reporting(object):
 
         # Calculate metrics
         eval_metrics = self._eval_metrics
-        eval_metrics["score_new"].append(task_eval_data[no_trained_tasks-1]["acc"])
-        eval_metrics["score_base"].append(task_eval_data[0]["acc"])
+        eval_metrics["score_new_raw"].append(task_eval_data[no_trained_tasks-1]["acc"])
+        eval_metrics["score_base_raw"].append(task_eval_data[0]["acc"])
 
         score_all = 0
+        score_all_raw = []
         base = self.task_base_ind
+        base_ordered = [base[i] for i in range(no_trained_tasks)]
+
         for key in sorted(task_eval_data):
             if key < no_trained_tasks:
                 score_all += task_eval_data[key]["acc"] / base[key]
+                score_all_raw.append(task_eval_data[key]["acc"])
 
         score_all = score_all / float(no_trained_tasks)
-        eval_metrics["score_all"].append(score_all)
 
-        # print(f"SCORE NEW: {eval_metrics['score_new']}")
-        # print(f"SCORE BASE: {eval_metrics['score_base']}")
-        # print(f"SCORE ALL: {eval_metrics['score_all']}")
+        eval_metrics["score_all_raw"].append(score_all_raw)
+        eval_metrics["score_all_last_raw"].append(score_all)
+
+        score_new_s = self.norm_scores(eval_metrics["score_new_raw"], base_ordered)
+        score_base_s = self.norm_scores(eval_metrics["score_base_raw"], base_ordered)
+        score_all_s = eval_metrics["score_all_last_raw"]
+
+        eval_metrics["score_new"] = score_new = np.mean(score_new_s)
+        eval_metrics["score_base"] = score_base = np.mean(score_base_s)
+        eval_metrics["score_all"] = score_all = np.mean(score_all_s)
+
+        def l_msg(ls: List[float]):
+            return "".join([f"{x:3.6f}   " for x in ls])
+
+        idx = no_trained_tasks -1
+        print(f"\t[{idx:3}] score New's  (n):   [{score_new:3.6f}]    [{l_msg(score_new_s)}]")
+        print(f"\t[{idx:3}] score Base's (n):   [{score_base:3.6f}]    [{l_msg(score_base_s)}")
+        print(f"\t[{idx:3}] score All's  (n):   [{score_all:3.6f}]    [{l_msg(score_all_s)}]")
 
         # Plot
         mode = self.mode
@@ -316,10 +363,19 @@ class Reporting(object):
         if mode == "seq":
             if plot_t:
                 plot_t.tick([("global/average", eval_data["global_avg"], no_trained_tasks)])
+                plot_t.tick([("global/average", {
+                    "score_new": score_new,
+                    "score_base": score_base,
+                    "score_all": score_all,
+                }, no_trained_tasks)])
 
                 # Draw vertical line
                 plot_t.tick([("global/multi", {f"marker_{task_idx}": 0}, seen)])
                 plot_t.tick([("global/multi", {f"marker_{task_idx}": self.no_tasks+1}, seen)])
+
+    @staticmethod
+    def norm_scores(scores: List[float], base: List[float]):
+        return [s / b for s, b in zip(scores, base)]
 
     @property
     def get_dataset_avg(self) -> Dict:
@@ -363,8 +419,9 @@ class Reporting(object):
 
     @staticmethod
     def _show_task_result(idx: int, task_name: str, acc: float, loss: float,
-                          is_acc_better: bool, is_loss_better: bool) -> None:
-        msg = f"      [{idx:6}]" +\
+                          is_acc_better: bool, is_loss_better: bool,
+                          crt_trained: bool) -> None:
+        msg = f"\t[{idx:3}] " +\
               f"[Task {clr(f'{task_name:s}', attrs=['bold']):s}]\t"
 
         colors = ['white', 'on_magenta'] if is_acc_better else ['yellow']
@@ -372,4 +429,8 @@ class Reporting(object):
 
         colors = ['white', 'on_magenta'] if is_loss_better else ['yellow']
         msg += f" Loss: {clr(f'{loss:6.4f}', *colors):s}"
+
+        if crt_trained:
+            msg += f" {clr('*', 'red', attrs=['bold'])}"
+
         print(msg)
