@@ -211,7 +211,7 @@ class MultiTask(object):
                                               drop_last=self.drop_last, shuffle=self.shuffle)
             snd_part = "validation" if task.validation_set else "test"
             test_dataloader = TaskDataLoader(
-                task.name, snd_part, batch_size=self.test_batch_size)
+                task, snd_part, batch_size=self.test_batch_size)
             yield train_dataloader, test_dataloader
 
     def test_tasks(self, first_n: int = 0) -> Iterator[TaskDataLoader]:
@@ -220,7 +220,7 @@ class MultiTask(object):
                 break
             snd_part = "validation" if task.validation_set else "test"
             test_dataloader = TaskDataLoader(
-                task.name, snd_part, batch_size=self.test_batch_size)
+                task, snd_part, batch_size=self.test_batch_size)
             yield test_dataloader
 
     def get_task_info(self):
@@ -320,10 +320,12 @@ def test_split():
             validation=.8,
             split=2,
             perms_no=None,
-            permute_targets=True
+            permute_targets=True,
+            common_head=True
         ),
         train=Namespace(
             batch_size=6000,
+            test_batch_size=5000,
             shuffle=True
         )
     )
@@ -381,8 +383,11 @@ def test_simul():
         )
     )
     multi_task = MultiTask(args, torch.device("cuda:0"))
+    i = 0
     for _inputs, _targets, _heads in multi_task.merged_tasks():
-        pass
+        i += 1
+        if i > 2 * multi_task.average_batches_per_epoch:
+            break
 
 
 if __name__ == "__main__":
