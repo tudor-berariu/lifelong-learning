@@ -297,7 +297,7 @@ class MultiTask(object):
 
     @property
     def out_size(self) -> List[int]:
-        return copy(self._out_size)
+        return max(self._out_size) if self.common_head else copy(self._out_size)
 
     @property
     def in_size(self) -> torch.Size:
