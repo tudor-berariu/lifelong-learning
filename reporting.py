@@ -6,8 +6,7 @@ import os
 import subprocess
 from termcolor import colored as clr
 
-from my_types import Args, Tasks, Model, LongVector, DatasetTasks, Optional
-from multi_task import MultiTask
+from my_types import Args
 
 Accuracy = float
 Loss = float
