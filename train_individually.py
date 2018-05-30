@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from typing import Type, Callable, Tuple
+from typing import Type, Callable, Tuple, Any
 from termcolor import colored as clr
 
 # Project imports
@@ -11,7 +11,7 @@ from utils import standard_train, standard_validate
 from reporting import Reporting
 
 
-def train_individually(model_class: Type,
+def train_individually(model_class: Callable[[Any], nn.Module],
                        get_optimizer: Callable[[nn.Module], optim.Optimizer],
                        multitask: MultiTask,
                        args: Args)-> None:

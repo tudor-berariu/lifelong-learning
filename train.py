@@ -25,6 +25,13 @@ def get_optimizer(args: Args) -> Tuple[Type, dict]:
 def run(args: Args, multitask: MultiTask = None) -> None:
     print(torch.__version__)
 
+    args.cuda = not args.no_cuda and torch.cuda.is_available()
+
+    args.device = device = "cuda:0" if args.cuda else "cpu"
+    for key, value in args.__dict__.items():
+        if isinstance(value, Namespace):
+            setattr(value, "device", device)
+
     if hasattr(args, "_experiment_parameters"):
         for p_name, p_value in args._experiment_parameters.__dict__.items():
             print(p_name, p_value)
@@ -39,15 +46,20 @@ def run(args: Args, multitask: MultiTask = None) -> None:
     def get_optim(model) -> optim.Optimizer:
         return optimizer(model, **optim_args)
 
+    def init_model(*args_, **kwargs_):
+        model = model_class(*args_, **kwargs_)
+        model = model.to(args.device)
+        return model
+
     if not os.path.isdir(args.out_dir):
         os.mkdir(args.out_dir)
 
     if args.mode == "sim":
         import train_simultaneously
-        train_simultaneously.train_simultaneously(model_class, get_optim, multitask, args)
+        train_simultaneously.train_simultaneously(init_model, get_optim, multitask, args)
     elif args.mode == "ind":
         import train_individually
-        train_individually.train_individually(model_class, get_optim, multitask, args)
+        train_individually.train_individually(init_model, get_optim, multitask, args)
     elif args.mode == "seq":
         from algorithms import get_algorithm
         train_sequentially = get_algorithm(args.lifelong.mode)

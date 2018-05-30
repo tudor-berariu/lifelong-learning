@@ -120,9 +120,9 @@ class TaskDataLoader(object):
 
 class MultiTask(object):
 
-    def __init__(self, args: Args,
-                 device: torch.device = torch.device("cpu")) -> None:
+    def __init__(self, args: Args) -> None:
 
+        device: torch.device = torch.device(args.device)
         datasets = args.tasks.datasets  # type: List[str]
         self._in_size = in_size = torch.Size(args.tasks.in_size)
         reset_targets = args.tasks.reset_targets  # type: bool
@@ -131,6 +131,7 @@ class MultiTask(object):
         perms_no = args.tasks.perms_no if args.tasks.perms_no else 1
         permute_targets = args.tasks.permute_targets  # type: bool
         self.common_head = common_head = args.tasks.common_head  # type: bool
+
 
         self.batch_size = args.train.batch_size  # type: int
         self.test_batch_size = args.train.test_batch_size  # type: int
@@ -319,13 +320,14 @@ def test_split():
             permute_targets=True,
             common_head=True
         ),
+        device=torch.device("cuda:0"),
         train=Namespace(
             batch_size=6000,
             test_batch_size=5000,
             shuffle=True
         )
     )
-    multi_task = MultiTask(args, torch.device("cuda:0"))
+    multi_task = MultiTask(args)
     for train_loader, valid_loader in multi_task.train_tasks():
         print(train_loader.name)
         for _inputs, _targets, _heads in train_loader:
@@ -346,13 +348,14 @@ def test_perms():
             permute_targets=True,
             common_head=False
         ),
+        device=torch.device("cuda:0"),
         train=Namespace(
             batch_size=6000,
             test_batch_size=5000,
             shuffle=True
         )
     )
-    multi_task = MultiTask(args, torch.device("cuda:0"))
+    multi_task = MultiTask(args)
     for train_loader, valid_loader in multi_task.train_tasks():
         for _train_loader, _valid_loader, _heads in train_loader:
             pass
@@ -371,14 +374,16 @@ def test_simul():
             perms_no=3,
             permute_targets=True,
             common_head=True
+
         ),
+        device=torch.device("cuda:0"),
         train=Namespace(
             batch_size=6000,
             test_batch_size=5000,
             shuffle=True
         )
     )
-    multi_task = MultiTask(args, torch.device("cuda:0"))
+    multi_task = MultiTask(args)
     i = 0
     for _inputs, _targets, _heads in multi_task.merged_tasks():
         i += 1

@@ -362,7 +362,10 @@ class Reporting(object):
         # Calculate metrics
         eval_metrics = self._eval_metrics
         eval_metrics["score_new_raw"].append(task_eval_data[no_trained_tasks-1]["acc"])
-        eval_metrics["score_base_raw"].append(task_eval_data[0]["acc"])
+        if 0 in task_eval_data:
+            eval_metrics["score_base_raw"].append(task_eval_data[0]["acc"])
+        else:
+            eval_metrics["score_base_raw"].append(eval_metrics["score_base_raw"][-1])
 
         score_all = 0
         score_all_raw = []

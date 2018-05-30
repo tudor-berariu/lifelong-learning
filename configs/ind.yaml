@@ -1,15 +1,15 @@
 title: "test_multi"
-no_cuda: False
+no_cuda: yes
 mode: "ind"
 keep_alive: yes
 
 tasks:
-  datasets: ["mnist", "fashion"]
+  datasets: ["mnist", "fashion", "cifar10"]
   in_size: [3, 32, 32]
   reset_targets: False
   validation: 0
   split: False
-  perms_no: 2
+  perms_no: 5
   permute_targets: no
   common_head: yes
 
