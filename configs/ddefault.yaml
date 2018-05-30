@@ -1,6 +1,6 @@
 title: "test_multi"
 no_cuda: False
-mode: "seq"
+mode: "ind"
 keep_alive: yes
 
 tasks:
@@ -11,10 +11,13 @@ tasks:
   split: False
   perms_no: 5
   permute_targets: no
-  common_head: no
+  common_head: yes
 
 model:
   name: mlp
+  activation: &act "ReLU"
+  _conv: [["Conv2d", -1, 20, 5], ["MaxPool2d", 2], [*act,],
+          ["Conv2d", 20, 50, 5], ["MaxPool2d", 2], [*act,]]
   hidden_units: [100, 100]
   use_softmax: no
 
