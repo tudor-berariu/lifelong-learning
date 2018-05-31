@@ -12,5 +12,5 @@ train:
   _optimizer:
     - {"__name": "Adam 0.001", "name": Adam, "optimizer_args": {"lr": 0.001}}
     - {"__name": "RMSprop 0.001", "name": RMSprop, "optimizer_args": {"lr": 0.001}}
-    - {"__name": "SGD 0.01 m 0.95", "name": SGD, "optimizer_args": {"lr": 0.01, "momentum": 0.95}}
-    - {"__name": "SGD 0.1 nesterov 0.9 decay", "name": SGD, "optimizer_args": {"lr": 0.1, "nesterov": True, "momentum": 0.9}, "lr_decay": {"gamma": 0.1, "step": 5}}
+    - {"__name": "SGD 0.01 +M 0.95", "name": SGD, "optimizer_args": {"lr": 0.01, "momentum": 0.95}}
+    - {"__name": "SGD 0.1 +Nest 0.9 decay", "name": SGD, "optimizer_args": {"lr": 0.1, "nesterov": True, "momentum": 0.9}, "lr_decay": {"gamma": 0.1, "step": 5}}

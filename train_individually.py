@@ -21,7 +21,10 @@ def train_individually(init_model: Callable[[Any], nn.Module],
 
     epochs_per_task = args.train.epochs_per_task
     model_params = args.model
-    batch_report_freq = args.reporting.batch_report_freq
+
+    # TODO: check this [0][0] below
+    # You said report means saving, but it seems to print...
+    batch_train_show_freq = args.reporting.batch_train_show_freq
 
     in_size = multitask.in_size
     out_size = multitask.out_size
@@ -44,7 +47,7 @@ def train_individually(init_model: Callable[[Any], nn.Module],
         report.register_model({"summary": model.__str__()})
 
         # -- LR Scheduler
-        optim_args  = args.train._optimizer
+        optim_args = args.train._optimizer
         if hasattr(optim_args, "lr_decay"):
             step = optim_args.lr_decay.step
             gamma = optim_args.lr_decay.gamma
@@ -62,7 +65,7 @@ def train_individually(init_model: Callable[[Any], nn.Module],
             # TODO Adjust optimizer learning rate
 
             train_loss, train_acc, _ = standard_train(train_loader, model, optimizer, crt_epoch,
-                                                      report_freq=batch_report_freq)
+                                                      batch_show_freq=batch_train_show_freq)
             seen += len(train_loader)
 
             val_loss, val_acc = standard_validate(validate_loader, model, crt_epoch)

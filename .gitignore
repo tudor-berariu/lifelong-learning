@@ -1,7 +1,13 @@
 nohup.out
 results/
+
+# Experiment configuration
+
 configs/default.yaml
-configs/individuals/individuals*.yaml
+configs/individual/individual*.yaml
+configs/simultaneous/simultaneous*.yaml
+configs/simultaneous_perms/simultaneous_perms*.yaml
+
 .idea
 *~
 \#*#

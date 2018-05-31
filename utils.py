@@ -59,7 +59,8 @@ def accuracy(outputs: List[Tensor], targets: List[Tensor], topk=(1,)) -> List[Tu
 
 def standard_train(train_loader: Union[TaskDataLoader, Iterator[Batch]], model: nn.Module,
                    optimizer: torch.optim.Optimizer, epoch: int,
-                   report_freq: int = -1, max_batch: int = np.inf)-> Tuple[float, float, int]:
+                   batch_show_freq: int = -1,
+                   max_batch: int = np.inf)-> Tuple[float, float, int]:
 
     losses = AverageMeter()
     acc = AverageMeter()
@@ -76,8 +77,8 @@ def standard_train(train_loader: Union[TaskDataLoader, Iterator[Batch]], model: 
         outputs = model(data, head_idx=head_idx)
 
         loss = 0
-        for out, t in zip(outputs, targets):
-            loss += functional.cross_entropy(out, t)
+        for out, target in zip(outputs, targets):
+            loss += functional.cross_entropy(out, target)
 
         loss.backward()
         optimizer.step()
@@ -89,7 +90,7 @@ def standard_train(train_loader: Union[TaskDataLoader, Iterator[Batch]], model: 
         acc.update(top1, data.size(0))
         losses.update(loss.item(), data.size(0))
 
-        if (batch_idx + 1) % report_freq == 0 and report_freq > 0:
+        if batch_show_freq > 0 and (batch_idx + 1) % batch_show_freq == 0:
             print(f'\t\t[Train] [Epoch: {epoch:3}] [Batch: {batch_idx:5}]:\t '
                   f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
                   f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')

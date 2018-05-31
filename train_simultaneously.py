@@ -21,7 +21,7 @@ def train_simultaneously(model_class: Type,
 
     epochs_per_task = args.train.epochs_per_task
     model_params = args.model
-    batch_report_freq = args.reporting.batch_report_freq
+    batch_train_show_freq = args.reporting.batch_train_show_freq
 
     in_size = multitask.in_size
     out_size = multitask.out_size
@@ -41,7 +41,7 @@ def train_simultaneously(model_class: Type,
     seen = 0
     val_epoch = 0
 
-        # -- LR Scheduler
+    # -- LR Scheduler
 
     optim_args = args.train._optimizer
     if hasattr(optim_args, "lr_decay"):
@@ -55,13 +55,13 @@ def train_simultaneously(model_class: Type,
     else:
         scheduler = None
 
-
-
     for crt_epoch in range(epochs_per_task * no_tasks):
         # TODO Adjust optimizer learning rate
-        scheduler.step()
+        if scheduler:
+            scheduler.step()
         train_loss, train_acc, train_seen = standard_train(train_loader, model, optimizer,
-                                                           crt_epoch, report_freq=batch_report_freq,
+                                                           crt_epoch,
+                                                           batch_show_freq=batch_train_show_freq,
                                                            max_batch=train_batch_cnt)
         seen += train_seen
 

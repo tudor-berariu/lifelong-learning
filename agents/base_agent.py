@@ -33,14 +33,14 @@ class BaseAgent(object):
         self.eval_freq = args.reporting.eval_freq
         self.eval_not_trained = args.reporting.eval_not_trained
         self.save_report_freq = args.reporting.save_report_freq
-        batch_report_freq = args.reporting.batch_report_freq
 
-        self._train_batch_report_freq = batch_report_freq[0][0]
-        self._train_batch_print_freq = batch_report_freq[0][1]
-        self._eval_batch_report_freq = batch_report_freq[1][0]
-        self._eval_batch_print_freq = batch_report_freq[1][1]
-        self._train_batch_report = sum(batch_report_freq[0]) > 0
-        self._eval_batch_report = sum(batch_report_freq[1]) > 0
+        self._train_batch_save_freq = args.reporting.batch_train_save_freq
+        self._train_batch_show_freq = args.reporting.batch_train_show_freq
+        self._eval_batch_save_freq = args.reporting.batch_eval_save_freq
+        self._eval_batch_show_freq = args.reporting.batch_eval_show_freq
+
+        self._train_batch_report = (self._train_batch_save_freq + self._train_batch_show_freq) > 0
+        self._eval_batch_report = (self._eval_batch_save_freq + self._eval_batch_show_freq) > 0
 
         self.in_size = in_size = multitask.in_size
         self.out_size = out_size = multitask.out_size
@@ -168,8 +168,8 @@ class BaseAgent(object):
         self._start_train_task()  # TEMPLATE
 
         report_or_not = self._train_batch_report
-        print_freq = self._train_batch_print_freq
-        report_freq = self._train_batch_report_freq
+        print_freq = self._train_batch_show_freq
+        report_freq = self._train_batch_save_freq
         report = self.report
 
         last_batch = len(train_loader) - 1
@@ -232,8 +232,8 @@ class BaseAgent(object):
         self._start_eval_task()  # TEMPLATE
 
         report_or_not = self._eval_batch_report
-        print_freq = self._eval_batch_print_freq
-        report_freq = self._eval_batch_report_freq
+        print_freq = self._eval_batch_show_freq
+        report_freq = self._eval_batch_save_freq
         report = self.report
 
         last_batch = len(val_loader) - 1
