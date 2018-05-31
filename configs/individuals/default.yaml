@@ -51,8 +51,8 @@ reporting:
   eval_not_trained: yes
   save_report_freq: 5
   save_report_trace: yes
+  batch_report_freq: 10
   epoch_report_freq: 1
-  batch_report_freq: [[0, 5], [0, 0]] # [[train_report, train_print], [eval_report, eval_print]]
   plot_tensorboard: yes
   tensorboard_auto_start: yes
   plot_comet: no
