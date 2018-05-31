@@ -61,9 +61,10 @@ def run(args: Args, multitask: MultiTask = None) -> None:
         import train_individually
         train_individually.train_individually(init_model, get_optim, multitask, args)
     elif args.mode == "seq":
-        from algorithms import get_algorithm
-        train_sequentially = get_algorithm(args.lifelong.mode)
-        train_sequentially(model_class, get_optim, multitask, args)
+        from agents import get_agent
+        agent_class = get_agent(args.lifelong.mode)
+        agent = agent_class(init_model, get_optim, multitask, args)
+        agent.train_sequentially()
 
 
 def main(args: Args):

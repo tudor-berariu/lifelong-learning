@@ -188,7 +188,9 @@ class Reporting(object):
         with open(os.path.join(self.out_dir, "model_summary"), op) as f:
             s = "=" * 40 + f"{len(self._model_summary):4}   " + "=" * 40 + "\n"
             f.writelines([s, "\n"])
-            f.write(str(self._model_summary[-1]))
+            for k, v in self._model_summary[-1].items():
+                f.write(str(k) + " :: \n")
+                f.write(str(v))
             f.writelines(["\n", "\n"])
 
 
@@ -250,6 +252,9 @@ class Reporting(object):
             if plot_t:
                 plot_t.tick([(task_name, {f"loss_train": loss, "acc_train": acc}, train_epoch)])
 
+    def trace_train_batch(self, seen_training: int, task_idx: int, train_epoch: int, info: dict):
+        pass
+
     def trace_eval(self, seen_training: int, task_idx: int, train_epoch: int, val_epoch: int,
                    info: dict) -> Tuple[bool, bool]:
         info = info.copy()
@@ -309,6 +314,10 @@ class Reporting(object):
 
         return new_best_acc, new_best_loss
 
+    def trace_eval_batch(self, seen_training: int, task_idx: int,
+                         train_epoch: int, val_epoch: int, info: dict):
+        pass
+
     @staticmethod
     def update_best(info: Dict, last: Dict, best: Dict,
                     task_idx: int, seen_training: int) -> Tuple[bool, bool]:
@@ -333,7 +342,7 @@ class Reporting(object):
 
         info["new_best_acc"], info["new_best_loss"] = new_best_acc, new_best_loss
 
-        last.update(info.copy())
+        last[task_idx].update(info.copy())
         return new_best_acc, new_best_loss
 
     def finished_training_task(self, no_trained_tasks: int, seen: int) -> None:

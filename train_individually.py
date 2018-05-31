@@ -11,7 +11,7 @@ from utils import standard_train, standard_validate
 from reporting import Reporting
 
 
-def train_individually(model_class: Callable[[Any], nn.Module],
+def train_individually(init_model: Callable[[Any], nn.Module],
                        get_optimizer: Callable[[nn.Module], optim.Optimizer],
                        multitask: MultiTask,
                        args: Args)-> None:
@@ -37,7 +37,7 @@ def train_individually(model_class: Callable[[Any], nn.Module],
         print(f"Training on task {task_idx:d}: {task_name:s}.")
 
         # Initialize model & optim
-        model: nn.Module = model_class(model_params, in_size, out_size)
+        model: nn.Module = init_model(model_params, in_size, out_size)
         optimizer = get_optimizer(model.parameters())
 
         report.register_model({"summary": model.__str__()})

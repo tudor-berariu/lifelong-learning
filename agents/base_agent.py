@@ -4,34 +4,39 @@ import torch.optim as optim
 import torch.nn.functional as functional
 from torch import Tensor
 
-from typing import Union, Callable, Any, List, Dict, Iterator, Tuple
+from typing import Union, Callable, Any, List, Dict, Iterator, Tuple, Type
 import os
 import numpy as np
 
 # Project imports
 from my_types import Args
 from multi_task import MultiTask, TaskDataLoader, Batch
-from utils import standard_train, standard_validate
 from reporting import Reporting
 from utils import AverageMeter, accuracy
 
 
-class BaseAgent:
+class BaseAgent(object):
     def __init__(self, get_model: Callable[[Any], nn.Module],
                  get_optimizer: Callable[[nn.Module], optim.Optimizer],
                  multitask: MultiTask, args: Args):
 
         self._args = args
         self.epochs_per_task = args.train.epochs_per_task
-        self.batch_report_freq = args.reporting.batch_report_freq
+        model_params = args.model
+        self.multitask = multitask
+        self.device = torch.device(args.device)
+
         self.eval_freq = args.reporting.eval_freq
         self.eval_not_trained = args.reporting.eval_not_trained
-        model_params = args.model
         self.save_report_freq = args.reporting.save_report_freq
-        self.multitask = multitask
+        batch_report_freq = args.reporting.batch_report_freq
 
-        self._train_print_freq = self.batch_report_freq
-        self._eval_print_freq = self.batch_report_freq
+        self._train_batch_report_freq = batch_report_freq[0][0]
+        self._train_batch_print_freq = batch_report_freq[0][1]
+        self._eval_batch_report_freq = batch_report_freq[1][0]
+        self._eval_batch_print_freq = batch_report_freq[1][1]
+        self._train_batch_report = sum(batch_report_freq[0]) > 0
+        self._eval_batch_report = sum(batch_report_freq[1]) > 0
 
         self.in_size = in_size = multitask.in_size
         self.out_size = out_size = multitask.out_size
@@ -60,9 +65,9 @@ class BaseAgent:
         self.crt_task_name: str = None
         self.crt_eval_epoch: int = 0
 
-    def _init_model(self, get_model: Callable[[Any], nn.Module],
+    def _init_model(self, get_model: Type,
                     get_optimizer: Callable[[nn.Module], optim.Optimizer],
-                    model_params: Args, in_size: torch.Size, out_size: List[torch.Size]) -> None:
+                    model_params: Args, in_size: torch.Size, out_size: List[int]) -> None:
 
         self._model: nn.Module = get_model(model_params, in_size, out_size)
         self._optimizer = get_optimizer(self._model.parameters())
@@ -79,6 +84,7 @@ class BaseAgent:
         # Load general Classes
         report = self.report
         multitask = self.multitask
+        seen = 0
 
         # Loop over tasks
         for self.crt_task_idx, self.crt_data_loaders in enumerate(self.train_tasks):
@@ -95,8 +101,8 @@ class BaseAgent:
                 crt_epoch = self.crt_task_epoch
 
                 # Train task 1 epoch
-                train_loss, train_acc, _, info = self._train_task(train_loader, crt_epoch)
-                self.seen += len(train_loader)
+                train_loss, train_acc, seen, info = self._train_task(train_task_idx, train_loader,
+                                                                     crt_epoch)
 
                 # Get information to feed to reporting agent
                 train_info = {"acc": train_acc, "loss": train_loss}
@@ -110,7 +116,8 @@ class BaseAgent:
                     # Validate on first 'how_many' tasks
                     how_many = self.no_tasks if self.eval_not_trained else train_task_idx + 1
                     for val_task_idx, val_loader in enumerate(multitask.test_tasks(how_many)):
-                        val_loss, val_acc, info = self._eval_task(val_loader, crt_epoch, eval_epoch)
+                        val_loss, val_acc, info = self._eval_task(val_task_idx, val_loader,
+                                                                  crt_epoch, eval_epoch)
 
                         #  -- Reporting
                         val_info = {"acc": val_acc, "loss": val_loss}
@@ -136,22 +143,26 @@ class BaseAgent:
 
         report.save()
 
-    def _train_task(self, train_loader: Union[TaskDataLoader, Iterator[Batch]],
+    def _train_task(self, task_idx: int, train_loader: Union[TaskDataLoader, Iterator[Batch]],
                     epoch: int, max_batch: int = np.inf) -> Tuple[float, float, int, Dict]:
 
         self.crt_train_info = info = dict({})
 
         self._start_train_task()  # TEMPLATE
 
-        report_freq = self._train_print_freq
+        report_or_not = self._train_batch_report
+        print_freq = self._train_batch_print_freq
+        report_freq = self._train_batch_report_freq
+        report = self.report
+
+        last_batch = len(train_loader) - 1
 
         losses = AverageMeter()
         acc = AverageMeter()
         correct_cnt = 0
-        seen = 0.
+        seen_epoch = 0
 
         self.train()
-
         for batch_idx, (data, targets, head_idx) in enumerate(train_loader):
             if batch_idx > max_batch:
                 break
@@ -162,26 +173,33 @@ class BaseAgent:
             (top1, correct), = accuracy(outputs, targets)
             correct_cnt += correct
 
-            seen += data.size(0)
+            seen_epoch += data.size(0)
+            self.seen += data.size(0)
             acc.update(top1, data.size(0))
             losses.update(loss.item(), data.size(0))
 
-            if (batch_idx + 1) % report_freq == 0 and report_freq > 0:
-                print(f'\t\t[Train] [Epoch: {epoch:3}] [Batch: {batch_idx:5}]:\t '
-                      f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
-                      f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
+            if report_or_not:
+                if report_freq > 0:
+                    if (batch_idx + 1) % report_freq == 0 or batch_idx == last_batch:
+                        report.trace_train_batch(self.seen, task_idx, epoch, info)
+
+                if print_freq > 0:
+                    if (batch_idx + 1) % print_freq == 0 or batch_idx == last_batch:
+                        print(f'\t\t[Train] [Epoch: {epoch:3}] [Batch: {batch_idx:5}]:\t '
+                              f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
+                              f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
 
         self._end_train_task()  # TEMPLATE
 
-        return losses.avg, correct_cnt / float(seen), seen, info
+        return losses.avg, correct_cnt / float(seen_epoch), seen_epoch, info
 
-    def _train_task_batch(self, batch_idx: int, data: Tensor, targets:List[Tensor],
-                          head_idx: Union[int, Tensor])-> List[List[Tensor], Tensor, Dict]:
+    def _train_task_batch(self, batch_idx: int, data: Tensor, targets: List[Tensor],
+                          head_idx: Union[int, Tensor])-> Tuple[List[Tensor], Tensor, Dict]:
 
         self._optimizer.zero_grad()
         outputs = self._model(data, head_idx=head_idx)
 
-        loss = torch.tensor(0.)
+        loss = torch.tensor(0., device=self.device)
         for out, t in zip(outputs, targets):
             loss += functional.cross_entropy(out, t)
 
@@ -190,17 +208,23 @@ class BaseAgent:
 
         return outputs, loss, dict({})
 
-    def _eval_task(self, val_loader: TaskDataLoader, train_epoch: int, val_epoch: int):
+    def _eval_task(self, task_idx: int, val_loader: TaskDataLoader,
+                   train_epoch: int, val_epoch: int) -> Tuple[float, float, Dict]:
         self.crt_eval_info = info = dict({})
 
         self._start_eval_task()  # TEMPLATE
 
+        report_or_not = self._eval_batch_report
+        print_freq = self._eval_batch_print_freq
+        report_freq = self._eval_batch_report_freq
+        report = self.report
+
+        last_batch = len(val_loader) - 1
         losses = AverageMeter()
         acc = AverageMeter()
         correct_cnt = 0
-        seen = 0
-
-        report_freq = self._eval_print_freq
+        seen = self.seen
+        seen_eval = 0
 
         with torch.no_grad():
             for batch_idx, (data, targets, head_idx) in enumerate(val_loader):
@@ -211,29 +235,35 @@ class BaseAgent:
                 (top1, correct), = accuracy(outputs, targets)
                 correct_cnt += correct
 
-                seen += data.size(0)
+                seen_eval += data.size(0)
                 acc.update(top1, data.size(0))
                 losses.update(loss.item(), data.size(0))
 
-                if (batch_idx + 1) % report_freq == 0 and report_freq > 0:
-                    print(f'\t\t[Eval] [Epoch: {epoch:3}] [Batch: {batch_idx:5}]:\t '
-                          f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
-                          f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
+                if report_or_not:
+                    if report_freq > 0:
+                        if (batch_idx + 1) % report_freq == 0 or batch_idx == last_batch:
+                            report.trace_eval_batch(seen, task_idx, train_epoch, val_epoch, info)
+
+                    if print_freq > 0:
+                        if (batch_idx + 1) % print_freq == 0 or batch_idx == last_batch:
+                            print(f'\t\t[Eval] [Epoch: {train_epoch:3}] [Batch: {batch_idx:5}]:\t '
+                                  f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
+                                  f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
 
             self._end_eval_task()  # TEMPLATE
 
-            return losses.avg, correct_cnt / float(seen), info
+            return losses.avg, correct_cnt / float(seen_eval), info
 
-    def _eval_task_batch(self, batch_idx: int, data: Tensor, targets:List[Tensor],
-                         head_idx: Union[int, Tensor]) -> List[List[Tensor], Tensor, Dict]:
+    def _eval_task_batch(self, batch_idx: int, data: Tensor, targets: List[Tensor],
+                         head_idx: Union[int, Tensor]) -> Tuple[List[Tensor], Tensor, Dict]:
 
         outputs = self._model(data, head_idx=head_idx)
 
-        loss = torch.tensor(0.)
+        loss = torch.tensor(0., device=self.device)
         for out, t in zip(outputs, targets):
             loss += functional.cross_entropy(out, t)
 
-        return outputs, loss, {}
+        return outputs, loss, dict({})
 
     def train(self):
         self._model.train()
@@ -242,25 +272,19 @@ class BaseAgent:
         self._model.eval()
 
     def _start_experiment(self):
-        print("____ _start_experiment")
         pass
 
     def _end_experiment(self):
-        print("____ _end_experiment")
         pass
 
     def _start_train_task(self):
-        print("____ _start_train_task")
         pass
 
     def _end_train_task(self):
-        print("____ _end_train_task")
         pass
 
     def _start_eval_task(self):
-        print("____ _start_eval_task")
         pass
 
     def _end_eval_task(self):
-        print("____ _end_eval_task")
         pass
