@@ -14,9 +14,11 @@ from multi_task import MultiTask, TaskDataLoader, Batch
 from reporting import Reporting
 from utils import AverageMeter, accuracy
 
+
 class EmptyScheduler:
     def step(self):
         pass
+
 
 class BaseAgent(object):
     def __init__(self, get_model: Callable[[Any], nn.Module],
