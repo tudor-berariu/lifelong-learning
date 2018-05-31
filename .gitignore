@@ -7,6 +7,7 @@ configs/default.yaml
 configs/individual/individual*.yaml
 configs/simultaneous/simultaneous*.yaml
 configs/simultaneous_perms/simultaneous_perms*.yaml
+configs/small_four_in_seq/small_four_in_seq*.yaml
 
 .idea
 *~
