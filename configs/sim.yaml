@@ -39,7 +39,10 @@ train:
   stop_if_not_better: 5
   test_batch_size: 0
   optimizer: Adam
-  optimizer_args: { lr: 0.001 }
+  _optimizer_args: { lr: 0.001 }
+  _lr_decay:
+    gamma: 0.1
+    step: 5
 
 reporting:
   min_save: no

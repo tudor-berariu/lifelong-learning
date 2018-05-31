@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim.lr_scheduler import MultiStepLR
 from typing import Type, Callable, Tuple, Any
 from termcolor import colored as clr
 
@@ -40,13 +41,24 @@ def train_individually(model_class: Callable[[Any], nn.Module],
         model: nn.Module = model_class(model_params, in_size, out_size)
         optimizer = get_optimizer(model.parameters())
 
+        # -- LR Scheduler
+
+        if hasattr(args.train, "_lr_decay"):
+            step = args.train._optimizer.lr_decay.step
+            gamma = args.train._optimizer.lr_decay.gamma
+            scheduler = MultiStepLR(optimizer, milestones=list(range(step, epochs_per_task, step)),
+                                    gamma=gamma)
+        else:
+            scheduler = None
+            
         report.register_model(model)
 
         seen = 0
         val_epoch = 0
 
         for crt_epoch in range(epochs_per_task):
-
+            if scheduler:
+                scheduler.step()
             # TODO Adjust optimizer learning rate
 
             train_loss, train_acc, _ = standard_train(train_loader, model, optimizer, crt_epoch,

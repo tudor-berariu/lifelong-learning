@@ -1,15 +1,15 @@
-title: "test_multi"
+title: "individuals"
 no_cuda: no
-mode: "seq"
-keep_alive: yes
+mode: "ind"
+keep_alive: no
 
 tasks:
-  datasets: ["mnist", "fashion"]
+  datasets: ["fake"]
   in_size: [3, 32, 32]
-  reset_targets: yes
+  reset_targets: False
   validation: 0
-  split: 2
-  perms_no: 2
+  split: False
+  perms_no: 0
   permute_targets: no
   common_head: yes
 
@@ -35,26 +35,25 @@ lifelong:
 train:
   batch_size: 1024
   shuffle: True
-  epochs_per_task: 2
+  epochs_per_task: 100
   stop_if_not_better: 5
   test_batch_size: 0
-  optimizer: Adam
-  optimizer_args: { lr: 0.001 }
-  _optimizer_args: { lr: 0.001 }
-  _lr_decay:
-    gamma: 0.1
-    step: 5
-  
+  _optimizer:
+    name: Adam
+    optimizer_args: { lr: 0.001 }
+    lr_decay:
+      gamma: 0.1
+      step: 1
 
 reporting:
-  min_save: no
+  min_save: yes
   eval_freq: 1
   eval_not_trained: yes
   save_report_freq: 5
   save_report_trace: yes
   batch_report_freq: 10
   epoch_report_freq: 1
-  plot_tensorboard: no
-  tensorboard_auto_start: no
+  plot_tensorboard: yes
+  tensorboard_auto_start: yes
   plot_comet: no
   comet_plot_freq_factor: 0.1

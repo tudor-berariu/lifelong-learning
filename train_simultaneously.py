@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim.lr_scheduler import MultiStepLR
 from typing import Type, Callable
 from termcolor import colored as clr
 
@@ -40,9 +41,24 @@ def train_simultaneously(model_class: Type,
     seen = 0
     val_epoch = 0
 
+        # -- LR Scheduler
+
+    if hasattr(args.train, "_lr_decay"):
+        step = args.train._lr_decay.step
+        gamma = args.train._lr_decay.gamma
+        scheduler = MultiStepLR(optimizer,
+                                milestones=list(range(step * no_tasks,
+                                                      epochs_per_task * no_tasks,
+                                                      step * no_tasks)),
+                                gamma=gamma)
+    else:
+        scheduler = None
+
+
+
     for crt_epoch in range(epochs_per_task * no_tasks):
         # TODO Adjust optimizer learning rate
-
+        scheduler.step()
         train_loss, train_acc, train_seen = standard_train(train_loader, model, optimizer,
                                                            crt_epoch, report_freq=batch_report_freq,
                                                            max_batch=train_batch_cnt)

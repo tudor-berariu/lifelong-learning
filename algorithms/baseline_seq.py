@@ -1,6 +1,7 @@
 import torch.nn as nn
 import torch.optim as optim
-from typing import Type, Callable
+from torch.optim.lr_scheduler import MultiStepLR
+from typing import Any, Type, Callable
 import os
 
 # Project imports
@@ -10,7 +11,7 @@ from utils import standard_train, standard_validate
 from reporting import Reporting
 
 
-def train_sequentially(model_class: Type,
+def train_sequentially(model_class: Callable[[Any], nn.Module],
                        get_optimizer: Callable[[nn.Module], optim.Optimizer],
                        multitask: MultiTask,
                        args: Args)-> None:
@@ -37,6 +38,20 @@ def train_sequentially(model_class: Type,
     seen = 0
     no_tasks = len(multitask)
 
+
+    # -- LR Scheduler
+
+    if hasattr(args.train, "_lr_decay"):
+        step = args.train._lr_decay.step
+        gamma = args.train._lr_decay.gamma
+        scheduler = MultiStepLR(optimizer,
+                                milestones=list(range(step,
+                                                      epochs_per_task * no_tasks,
+                                                      step)),
+                                gamma=gamma)
+    else:
+        scheduler = None
+
     for train_task_idx, data_loaders in enumerate(train_tasks):
         train_loader, validate_loader = data_loaders
         task_name = train_loader.name
@@ -46,6 +61,9 @@ def train_sequentially(model_class: Type,
         val_epoch = 0
 
         for crt_epoch in range(epochs_per_task):
+            if scheduler:
+                scheduler.step()
+
             train_loss, train_acc, _ = standard_train(train_loader, model, optimizer, crt_epoch,
                                                       report_freq=batch_report_freq)
             seen += len(train_loader)

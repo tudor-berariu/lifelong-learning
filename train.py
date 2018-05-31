@@ -17,9 +17,9 @@ from multi_task import MultiTask
 
 
 def get_optimizer(args: Args) -> Tuple[Type, dict]:
-    kwargs = value_of(args, "optimizer_args", Namespace(lr=0.001))
+    kwargs = args._optimizer.optimizer_args
     kwargs = namespace_to_dict(kwargs)
-    return optim.__dict__[args.optimizer], kwargs
+    return optim.__dict__[args._optimizer.name], kwargs
 
 
 def run(args: Args, multitask: MultiTask = None) -> None:
@@ -63,7 +63,7 @@ def run(args: Args, multitask: MultiTask = None) -> None:
     elif args.mode == "seq":
         from algorithms import get_algorithm
         train_sequentially = get_algorithm(args.lifelong.mode)
-        train_sequentially(model_class, get_optim, multitask, args)
+        train_sequentially(init_model, get_optim, multitask, args)
 
 
 def main(args: Args):

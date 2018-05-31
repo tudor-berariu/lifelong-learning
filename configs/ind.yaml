@@ -4,7 +4,7 @@ mode: "ind"
 keep_alive: yes
 
 tasks:
-  datasets: ["mnist", "fashion", "cifar10"]
+  datasets: ["fake"]
   in_size: [3, 32, 32]
   reset_targets: False
   validation: 0
@@ -35,14 +35,17 @@ lifelong:
 train:
   batch_size: 1024
   shuffle: True
-  epochs_per_task: 2
+  epochs_per_task: 10
   stop_if_not_better: 5
   test_batch_size: 0
   optimizer: Adam
-  optimizer_args: { lr: 0.001 }
+  _optimizer_args: { lr: 0.001 }
+  _lr_decay:
+    gamma: 0.1
+    step: 1
 
 reporting:
-  min_save: no
+  min_save: yes
   eval_freq: 1
   eval_not_trained: yes
   save_report_freq: 5
