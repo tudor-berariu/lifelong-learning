@@ -13,21 +13,28 @@ ORIGINAL_SIZE = {
     "mnist": torch.Size((1, 28, 28)),
     "fashion": torch.Size((1, 28, 28)),
     "cifar10": torch.Size((3, 32, 32)),
+    "svhn": torch.Size((3, 32, 32)),
+    "cifar100": torch.Size((3, 32, 32)),
     "fake":  torch.Size((3, 32, 32)),
 }
 
 MEAN_STD = {
     "mnist": {(3, 32, 32): (0.10003692801078261, 0.2752173485400458)},
     "fashion": {(3, 32, 32): (0.21899983604159193, 0.3318113789274)},
-    "cifar10": {(3, 32, 32): (0.4733630111949825, 0.25156892869250536)}
+    "cifar10": {(3, 32, 32): (0.4733630111949825, 0.25156892869250536)},
+    "cifar100": {(3, 32, 32): (0.478181,  0.268192)},
+    "svhn": {(3, 32, 32): (0.451419, 0.199291)}
 }
 
-CLASSES_NO = {"mnist": 10, "fashion": 10, "cifar10": 10, "fake": 10}
+CLASSES_NO = {"mnist": 10, "fashion": 10, "cifar10": 10, "fake": 10,
+              "svhn": 10, "cifar100": 100}
 
 DATASETS = {
     "mnist": datasets.MNIST,
     "fashion": datasets.FashionMNIST,
-    "cifar10": datasets.CIFAR10
+    "cifar10": datasets.CIFAR10,
+    "svhn": datasets.SVHN,
+    "cifar100": datasets.CIFAR100
 }
 
 
@@ -85,18 +92,31 @@ def get_mean_and_std(dataset_name: str,
 
     original_size = ORIGINAL_SIZE[dataset_name]  # type: torch.Size
     padding = get_padding(original_size, in_size)  # type: Padding
-    data = DATASETS[dataset_name](
-        f'./.data/.{dataset_name:s}_data',
-        train=True, download=True,
-        transform=transforms.Compose([
-            transforms.Pad(padding),
-            transforms.ToTensor(),
-            transforms.Lambda(lambda t: t.expand(in_size))
-        ]))
-    if torch.is_tensor(data.train_data):
+    if dataset_name == "svhn":
+        data = DATASETS[dataset_name](
+            f'./.data/.{dataset_name:s}_data',
+            split="train", download=True,
+            transform=transforms.Compose([
+                transforms.Pad(padding),
+                transforms.ToTensor(),
+                transforms.Lambda(lambda t: t.expand(in_size))
+            ]))
+    else:
+        data = DATASETS[dataset_name](
+            f'./.data/.{dataset_name:s}_data',
+            train=True, download=True,
+            transform=transforms.Compose([
+                transforms.Pad(padding),
+                transforms.ToTensor(),
+                transforms.Lambda(lambda t: t.expand(in_size))
+            ]))
+    
+    if hasattr(data, "train_data") and torch.is_tensor(data.train_data):
         batch_size = data.train_data.size(0)
-    elif isinstance(data.train_data, np.ndarray):
+    elif hasattr(data, "train_data") and isinstance(data.train_data, np.ndarray):
         batch_size = data.train_data.shape[0]
+    else:
+        batch_size = data.data.shape[0]
 
     loader = DataLoader(data, batch_size=batch_size)
     full_data, _ = next(iter(loader))  # get dataset in one batch
@@ -125,25 +145,46 @@ def load_data_async(dataset_name: str,
     padding = get_padding(original_size, in_size)
     mean, std = get_mean_and_std(dataset_name, in_size)
 
-    train_data = DATASETS[dataset_name](
-        f'./.data/.{dataset_name:s}_data',
-        train=True, download=True,
-        transform=transforms.Compose([
-            transforms.Pad(padding),
-            transforms.ToTensor(),
-            transforms.Lambda(lambda t: t.expand(in_size)),
-            transforms.Normalize((mean,), (std,))
-        ]))
-
-    test_data = DATASETS[dataset_name](
-        f'./.data/.{dataset_name:s}_data',
-        train=False, download=True,
-        transform=transforms.Compose([
-            transforms.Pad(padding),
-            transforms.ToTensor(),
-            transforms.Lambda(lambda t: t.expand(in_size)),
-            transforms.Normalize((mean,), (std,))
-        ]))
+    if dataset_name == "svhn":
+        train_data = DATASETS[dataset_name](
+            f'./.data/.{dataset_name:s}_data',
+            split="train", download=True,
+            transform=transforms.Compose([
+                transforms.Pad(padding),
+                transforms.ToTensor(),
+                transforms.Lambda(lambda t: t.expand(in_size)),
+                transforms.Normalize((mean,), (std,))
+            ]))
+    else:
+        train_data = DATASETS[dataset_name](
+            f'./.data/.{dataset_name:s}_data',
+            train=True, download=True,
+            transform=transforms.Compose([
+                transforms.Pad(padding),
+                transforms.ToTensor(),
+                transforms.Lambda(lambda t: t.expand(in_size)),
+                transforms.Normalize((mean,), (std,))
+            ]))    
+    if dataset_name == "svhn":
+        test_data = DATASETS[dataset_name](
+            f'./.data/.{dataset_name:s}_data',
+            split="test", download=True,
+            transform=transforms.Compose([
+                transforms.Pad(padding),
+                transforms.ToTensor(),
+                transforms.Lambda(lambda t: t.expand(in_size)),
+                transforms.Normalize((mean,), (std,))
+            ]))
+    else:
+        test_data = DATASETS[dataset_name](
+            f'./.data/.{dataset_name:s}_data',
+            train=False, download=True,
+            transform=transforms.Compose([
+                transforms.Pad(padding),
+                transforms.ToTensor(),
+                transforms.Lambda(lambda t: t.expand(in_size)),
+                transforms.Normalize((mean,), (std,))
+            ]))
 
     loader = DataLoader(train_data, batch_size=len(train_data),
                         num_workers=4)

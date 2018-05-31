@@ -1,0 +1,17 @@
+mode: ["ind"]
+
+tasks:
+  datasets: [["mnist"], ["cifar10"], ["cifar100"], ["svhn"], ["fashion"]]
+  
+model:
+  name: ["mlp", "lenet"]
+  hidden_units: [[100, 100], [100], [500]]
+
+train:
+  batch_size: [64, 256, 1024]
+  _optimizer:
+    - {"name": Adam, "optimizer_args": {"lr": 0.001}}
+    - {"name": RMSprop, "optimizer_args": {"lr": 0.001}}
+    - {"name": SGD, "optimizer_args": {"lr": 0.01, "momentum": 0.95}}
+    - {"name": SGD, "optimizer_args": {"lr": 0.1, "nesterov": True, "momentum": 0.9}, "lr_decay": {"gamma": 0.1, "step": 5}}
+

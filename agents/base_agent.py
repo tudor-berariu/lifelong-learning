@@ -14,6 +14,9 @@ from multi_task import MultiTask, TaskDataLoader, Batch
 from reporting import Reporting
 from utils import AverageMeter, accuracy
 
+class EmptyScheduler:
+    def step(self):
+        pass
 
 class BaseAgent(object):
     def __init__(self, get_model: Callable[[Any], nn.Module],
@@ -22,7 +25,6 @@ class BaseAgent(object):
 
         self._args = args
         self.epochs_per_task = args.train.epochs_per_task
-        model_params = args.model
         self.multitask = multitask
         self.device = torch.device(args.device)
 
@@ -40,11 +42,13 @@ class BaseAgent(object):
 
         self.in_size = in_size = multitask.in_size
         self.out_size = out_size = multitask.out_size
+        self.no_tasks: int = len(multitask)
+        self.total_no_of_epochs = self.epochs_per_task * self.no_tasks
 
         # Initialize model & optim
         self._model: nn.Module = None
         self._optimizer: optim.Optimizer = None
-        self._init_model(get_model, get_optimizer, model_params, in_size, out_size)
+        self._init_model(get_model, get_optimizer, args, in_size, out_size)
 
         self.train_tasks = multitask.train_tasks()
 
@@ -56,7 +60,6 @@ class BaseAgent(object):
         self.crt_train_info = dict({})
         self.crt_eval_info = dict({})
         self.seen: int = 0
-        self.no_tasks: int = len(multitask)
         self.all_epochs: int = 0
         self.all_eval_epochs: int = 0
         self.crt_task_epoch: int = -1
@@ -67,10 +70,21 @@ class BaseAgent(object):
 
     def _init_model(self, get_model: Type,
                     get_optimizer: Callable[[nn.Module], optim.Optimizer],
-                    model_params: Args, in_size: torch.Size, out_size: List[int]) -> None:
+                    args: Args, in_size: torch.Size, out_size: List[int]) -> None:
 
-        self._model: nn.Module = get_model(model_params, in_size, out_size)
+        self._model: nn.Module = get_model(args.model, in_size, out_size)
         self._optimizer = get_optimizer(self._model.parameters())
+
+        optim_args = args.train._optimizer
+        if hasattr(optim_args, "lr_decay"):
+            step = optim_args.lr_decay.step
+            gamma = optim_args.lr_decay.gamma
+            milestones = list(range(step, self.total_no_of_epochs, step))
+            self.scheduler = optim.lr_scheduler.MultiStepLR(self._optimizer,
+                                                            milestones=milestones,
+                                                            gamma=gamma)
+        else:
+            self.scheduler = EmptyScheduler()
 
     def get_model_summary(self) -> Dict:
         if isinstance(self._model, nn.Module):
@@ -129,6 +143,7 @@ class BaseAgent(object):
 
                     self.crt_eval_epoch += 1
                     self.all_eval_epochs += 1
+                    self.scheduler.step()
 
                 if crt_epoch % self.save_report_freq == 0:
                     report.save()

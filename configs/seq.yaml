@@ -1,12 +1,12 @@
 title: "test_multi"
-no_cuda: yes
+no_cuda: no
 mode: "seq"
 keep_alive: yes
 
 tasks:
   datasets: ["mnist"]
   in_size: [3, 32, 32]
-  reset_targets: no
+  reset_targets: yes
   validation: 0
   split: 0
   perms_no: 5
@@ -40,6 +40,11 @@ train:
   test_batch_size: 0
   optimizer: Adam
   optimizer_args: { lr: 0.001 }
+  _optimizer_args: { lr: 0.001 }
+  _lr_decay:
+    gamma: 0.1
+    step: 5
+  
 
 reporting:
   min_save: no
@@ -49,7 +54,7 @@ reporting:
   save_report_trace: yes
   batch_report_freq: 10
   epoch_report_freq: 1
-  plot_tensorboard: yes
-  tensorboard_auto_start: yes
+  plot_tensorboard: no
+  tensorboard_auto_start: no
   plot_comet: no
   comet_plot_freq_factor: 0.1
