@@ -1,6 +1,6 @@
 title: "DEFAULT"
 no_cuda: no
-mode: "seq"
+mode: "sim"
 keep_alive: no
 
 tasks:
@@ -9,7 +9,7 @@ tasks:
   reset_targets: False
   validation: 0
   split: False
-  perms_no: 5
+  perms_no: 100
   permute_targets: no
   common_head: yes
 
@@ -33,7 +33,7 @@ lifelong:
   signed_on_cpu: True
 
 train:
-  batch_size: 1024
+  batch_size: 1000
   shuffle: True
   epochs_per_task: 100
   stop_if_not_better: 5

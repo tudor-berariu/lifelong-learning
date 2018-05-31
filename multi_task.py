@@ -247,7 +247,11 @@ class MultiTask(object):
         return tasks_info
 
     def merged_tasks(self) -> Iterator[Batch]:
-        batch_size = self.batch_size // len(self)
+        import math
+        batch_size = int(math.ceil(float(self.batch_size) / float(len(self._tasks)))) * \
+            len(self._tasks)
+        print("Real batch size will be:", batch_size)
+        batch_size = batch_size // len(self._tasks)
         loaders = []
         kwargs = {"drop_last": self.drop_last, "batch_size": batch_size, "shuffle": self.shuffle}
 
@@ -292,10 +296,13 @@ class MultiTask(object):
 
     @property
     def average_batches_per_epoch(self):
+        import math
         sizes = []
         for task in self._tasks:
             sizes.append(len(task.train_set))
-        batches_cnt = np.mean(sizes) // (self.batch_size // len(self))
+        batch_size = int(math.ceil(float(self.batch_size) / float(len(self._tasks)))) * \
+            len(self._tasks)
+        batches_cnt = np.mean(sizes) // batch_size
         return batches_cnt
 
     def task_names(self) -> List[str]:
