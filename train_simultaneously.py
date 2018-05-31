@@ -35,7 +35,7 @@ def train_simultaneously(model_class: Type,
     model: nn.Module = model_class(model_params, in_size, out_size)
     optimizer = get_optimizer(model.parameters())
 
-    report = Reporting(args, multitask.get_task_info(), model=model)
+    report = Reporting(args, multitask.get_task_info(), model_summary=model)
     save_report_freq = args.reporting.save_report_freq
 
     seen = 0
@@ -43,9 +43,10 @@ def train_simultaneously(model_class: Type,
 
         # -- LR Scheduler
 
-    if hasattr(args.train, "_lr_decay"):
-        step = args.train._lr_decay.step
-        gamma = args.train._lr_decay.gamma
+    optim_args = args.train._optimizer
+    if hasattr(optim_args, "lr_decay"):
+        step = optim_args.lr_decay.step
+        gamma = optim_args.lr_decay.gamma
         scheduler = MultiStepLR(optimizer,
                                 milestones=list(range(step * no_tasks,
                                                       epochs_per_task * no_tasks,

@@ -82,7 +82,7 @@ class TensorboardSummary(object):
 
 class Reporting(object):
 
-    def __init__(self, args: Args, task_info: List[Dict], model: nn.Module = None,
+    def __init__(self, args: Args, task_info: List[Dict], model_summary: Dict = dict({}),
                  files_to_save: List[str] = []):
 
         self._args = args
@@ -99,13 +99,13 @@ class Reporting(object):
 
         # Register model summary
         self._model_summary = None
-        self.register_model(model)
+        self.register_model(model_summary)
 
         # Copy files files_to_save
         if not min_save:
             for file_path in files_to_save:
                 copyfile(file_path, os.path.join(self.out_dir,
-                                                 f"script_{os.path.basename(file_path)}"))
+                                                 f"{os.path.basename(file_path)}_script"))
 
         # Should read baseline for each task (individual/ simultanous)
         self.task_base_ind = dict({x["idx"]: x["best_individual"] for x in task_info})
@@ -135,9 +135,11 @@ class Reporting(object):
         self._best_eval = dict({task_idx: {"acc": {"value": -1, "seen": -1},
                                            "loss": {"value": np.inf, "seen": -1}}
                                 for task_idx in task_idx_to_name.keys()})
-
         self._last_eval = dict({task_idx: {"acc": -1, "seen": -1, "loss":  np.inf}
                                 for task_idx in task_idx_to_name.keys()})
+
+        self._best_train = self._best_eval.copy()
+        self._last_train = self._last_eval.copy()
 
         self._task_train_tick: List[Dict] = []
         self._eval_metrics: Dict = dict({
@@ -171,7 +173,7 @@ class Reporting(object):
         )
         return plot_t
 
-    def register_model(self, model: nn.Module):
+    def register_model(self, model_summary: Dict):
         if self.min_save:
             return
 
@@ -181,12 +183,14 @@ class Reporting(object):
             self._model_summary = []
             op = "w"
 
-        self._model_summary.append(model.__str__() if model else None)
+        self._model_summary.append(model_summary)
 
         with open(os.path.join(self.out_dir, "model_summary"), op) as f:
             s = "=" * 40 + f"{len(self._model_summary):4}   " + "=" * 40 + "\n"
             f.writelines([s, "\n"])
-            f.write(str(self._model_summary[-1]))
+            for k, v in self._model_summary[-1].items():
+                f.write(str(k) + " :: \n")
+                f.write(str(v))
             f.writelines(["\n", "\n"])
 
 
@@ -207,6 +211,8 @@ class Reporting(object):
         return plot_c
 
     def trace_train(self, seen_training: int, task_idx: int, train_epoch: int, info: dict):
+        info = info.copy()
+
         trace = self._train_trace
         self._max_seen_train = seen_training
 
@@ -228,6 +234,10 @@ class Reporting(object):
         acc, loss = info["acc"], info["loss"]
         task_name = self.task_name[task_idx]
 
+        # Update best
+        new_best_acc, new_best_loss = self.update_best(info, self._last_train, self._best_train,
+                                                       task_idx, seen_training)
+
         # Plot for individual training
         # -- Plot per individual task
         plot_t, plot_c = self.plot_t, self.plot_c
@@ -242,8 +252,12 @@ class Reporting(object):
             if plot_t:
                 plot_t.tick([(task_name, {f"loss_train": loss, "acc_train": acc}, train_epoch)])
 
+    def trace_train_batch(self, seen_training: int, task_idx: int, train_epoch: int, info: dict):
+        pass
+
     def trace_eval(self, seen_training: int, task_idx: int, train_epoch: int, val_epoch: int,
                    info: dict) -> Tuple[bool, bool]:
+        info = info.copy()
 
         self._has_evaluated = True
         trace = self._eval_trace
@@ -258,25 +272,11 @@ class Reporting(object):
         info["val_epoch"] = val_epoch
         trace[seen_training][task_idx].append(info)
 
-        best_eval = self._best_eval
-        new_best_acc, new_best_loss = False, False
-
         acc, loss = info["acc"], info["loss"]
 
-        last_eval = self._last_eval
-        last_eval[task_idx]["acc"] = acc
-        last_eval[task_idx]["loss"] = loss
-        last_eval[task_idx]["seen"] = seen_training
-
-        if best_eval[task_idx]["acc"]["value"] < acc:
-            best_eval[task_idx]["acc"]["value"] = acc
-            best_eval[task_idx]["acc"]["seen"] = seen_training
-            new_best_acc = True
-
-        if best_eval[task_idx]["loss"]["value"] > loss:
-            best_eval[task_idx]["loss"]["value"] = loss
-            best_eval[task_idx]["loss"]["seen"] = seen_training
-            new_best_loss = True
+        # Update best
+        new_best_acc, new_best_loss = self.update_best(info, self._last_eval, self._best_eval,
+                                                       task_idx, seen_training)
 
         task_name = self.task_name[task_idx]
         crt_training = task_idx in self._trained_before_eval
@@ -312,6 +312,37 @@ class Reporting(object):
             self._show_task_result(train_epoch, task_name, acc, loss,
                                    new_best_acc, new_best_loss, crt_training)
 
+        return new_best_acc, new_best_loss
+
+    def trace_eval_batch(self, seen_training: int, task_idx: int,
+                         train_epoch: int, val_epoch: int, info: dict):
+        pass
+
+    @staticmethod
+    def update_best(info: Dict, last: Dict, best: Dict,
+                    task_idx: int, seen_training: int) -> Tuple[bool, bool]:
+
+        # Calculate best loss and eval
+        new_best_acc, new_best_loss = False, False
+        acc, loss = info["acc"], info["loss"]
+
+        last[task_idx]["seen"] = seen_training
+
+        if best[task_idx]["acc"]["value"] < acc:
+            best[task_idx]["acc"]["value"] = acc
+            best[task_idx]["acc"]["seen"] = seen_training
+            best[task_idx]["acc"]["info"] = info.copy()
+            new_best_acc = True
+
+        if best[task_idx]["loss"]["value"] > loss:
+            best[task_idx]["loss"]["value"] = loss
+            best[task_idx]["loss"]["seen"] = seen_training
+            best[task_idx]["loss"]["info"] = info.copy()
+            new_best_loss = True
+
+        info["new_best_acc"], info["new_best_loss"] = new_best_acc, new_best_loss
+
+        last[task_idx].update(info.copy())
         return new_best_acc, new_best_loss
 
     def finished_training_task(self, no_trained_tasks: int, seen: int) -> None:

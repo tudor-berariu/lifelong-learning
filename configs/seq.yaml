@@ -4,12 +4,12 @@ mode: "seq"
 keep_alive: yes
 
 tasks:
-  datasets: ["mnist", "fashion"]
+  datasets: ["mnist"]
   in_size: [3, 32, 32]
   reset_targets: yes
   validation: 0
-  split: 2
-  perms_no: 2
+  split: 0
+  perms_no: 5
   permute_targets: no
   common_head: yes
 
