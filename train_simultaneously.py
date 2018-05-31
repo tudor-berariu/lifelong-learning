@@ -34,7 +34,7 @@ def train_simultaneously(model_class: Type,
     model: nn.Module = model_class(model_params, in_size, out_size)
     optimizer = get_optimizer(model.parameters())
 
-    report = Reporting(args, multitask.get_task_info(), model=model)
+    report = Reporting(args, multitask.get_task_info(), model_summary=model)
     save_report_freq = args.reporting.save_report_freq
 
     seen = 0

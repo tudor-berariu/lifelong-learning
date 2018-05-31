@@ -30,7 +30,7 @@ def train_sequentially(model_class: Type,
 
     train_tasks = multitask.train_tasks()
 
-    report = Reporting(args, multitask.get_task_info(), model=model,
+    report = Reporting(args, multitask.get_task_info(), model_summary=model,
                        files_to_save=[os.path.abspath(__file__)])
 
     save_report_freq = args.reporting.save_report_freq
