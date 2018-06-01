@@ -70,6 +70,8 @@ class BaseAgent(object):
         self.crt_task_name: str = None
         self.crt_eval_epoch: int = 0
 
+        self._batch_aux_losses = {}
+
     def _init_model(self, get_model: Type,
                     get_optimizer: Callable[[nn.Module], optim.Optimizer],
                     args: Args, in_size: torch.Size, out_size: List[int]) -> None:
@@ -160,6 +162,18 @@ class BaseAgent(object):
 
         report.save()
 
+    def batch_update_auxiliary_losses(self, info):
+        for key, value in info.items():
+            if key.startswith("loss_"):
+                meter = self._batch_aux_losses.setdefault(key, AverageMeter())
+                meter.update(value)
+
+    def batch_print_aux_losses(self):
+        msg = ""
+        for key, meter in self._batch_aux_losses.items():
+            msg += f'\t[{key[5:]:s}] crt: {meter.val:3.4f}  avg: {meter.avg:3.4f}'
+        return msg
+
     def _train_task(self, task_idx: int, train_loader: Union[TaskDataLoader, Iterator[Batch]],
                     epoch: int, max_batch: int = np.inf) -> Tuple[float, float, int, Dict]:
 
@@ -186,6 +200,7 @@ class BaseAgent(object):
 
             outputs, loss, info_batch = self._train_task_batch(batch_idx, data, targets, head_idx)
             info.update(info_batch)
+            self.batch_update_auxiliary_losses(info_batch)
 
             (top1, correct), = accuracy(outputs, targets)
             correct_cnt += correct
@@ -204,7 +219,8 @@ class BaseAgent(object):
                     if (batch_idx + 1) % print_freq == 0 or batch_idx == last_batch:
                         print(f'\t\t[Train] [Epoch: {epoch:3}] [Batch: {batch_idx:5}]:\t '
                               f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
-                              f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
+                              f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}' +
+                              self.batch_print_aux_losses())
 
         self._end_train_task()  # TEMPLATE
 
