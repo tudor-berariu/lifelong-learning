@@ -4,7 +4,7 @@ mode: "seq"
 keep_alive: no
 
 tasks:
-  datasets: ["mnist", "fashion"]
+  datasets: ["cifar10", "fashion", "mnist"]
   in_size: [3, 32, 32]
   reset_targets: False
   validation: 0
@@ -23,9 +23,9 @@ model:
 
 lifelong:
   mode: ewc
-  scale: 10.
-  merge_elasticities: True
-  first_task_only: True
+  scale: 100.
+  merge_elasticities: False
+  first_task_only: False
 
   alpha: 0.25
   g_norm: 2
@@ -39,7 +39,7 @@ lifelong:
 train:
   batch_size: 1000
   shuffle: True
-  epochs_per_task: 10
+  epochs_per_task: 5
   stop_if_not_better: 5
   test_batch_size: 0
   _optimizer:
