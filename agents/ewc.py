@@ -18,9 +18,13 @@ class EWC(BaseAgent):
         agent_args = args.lifelong
         self.merge_elasticities = agent_args.merge_elasticities
 
+        self.first_task_only = agent_args.first_task_only
+        self.scale = agent_args.scale
+        self.saved_tasks_no = 0
+
         self.elasticity = dict({})
         self.elasticities = []
-        self.weights = []
+        self.ref_params = []
 
     def _train_task_batch(self, batch_idx: int, data: Tensor, targets: List[Tensor],
                           head_idx: Union[int, Tensor])-> Tuple[List[Tensor], Tensor, Dict]:
@@ -31,49 +35,40 @@ class EWC(BaseAgent):
         task_no = self.crt_task_idx
 
         loss = torch.tensor(0., device=self.device)
-        for out, t in zip(outputs, targets):
-            loss += functional.cross_entropy(out, t)
+        for out, target in zip(outputs, targets):
+            loss += functional.cross_entropy(out, target)
+
+        loss_e = torch.tensor(0., device=self.device)
 
         if task_no > 0:
             elasticity = self.elasticity
             elasticities = self.elasticities
-            weights = self.weights
-
-            loss_e = torch.tensor(0., device=self.device)
+            ref_params = self.ref_params
 
             if self.merge_elasticities:
-                weight = weights[-1]
+                ref_param = ref_params[-1]
                 for name, param in model.named_parameters():
                     if param.requires_grad:
                         loss_e += torch.dot(elasticity[name].view(-1),
-                                            (weight[name] - param).view(-1).pow(2))
+                                            (ref_param[name] - param).view(-1).pow(2))
             else:
-                for ix, (weight, elasticity) in enumerate(zip(weights, elasticities)):
-                    if ix == 0:
-                        scale = 1000
-                    else:
-                        scale = 1
-
+                for _idx, (ref_param, elasticity) in enumerate(zip(ref_params, elasticities)):
                     for name, param in model.named_parameters():
                         if param.requires_grad:
-                            if ix == 0:
-                                loss_e += torch.dot(elasticity[name].view(-1),
-                                                    (weight[name] - param).view(-1).pow(2).view(-1)) \
-                                          * scale
-                            else:
-                                loss_e += torch.sum((weight[name] - param).view(-1).pow(2).view(
-                                    -1)) * scale
+                            loss_e += torch.dot(elasticity[name].view(-1),
+                                                (ref_param[name] - param).view(-1).pow(2).view(-1))
 
-
-            print(loss_e.item())
-            loss += loss_e
+            loss += loss_e * self.scale
 
         loss.backward()
         self._optimizer.step()
 
-        return outputs, loss, dict({})
+        return outputs, loss, dict({"loss_e": loss_e.item()})
 
     def _end_train_task(self):
+        if self.saved_tasks_no > 1 and self.first_task_only:
+            return
+
         train_loader, val_loader = self.crt_data_loaders
         assert hasattr(train_loader, "__len__")
         self._optimizer.zero_grad()
@@ -90,10 +85,10 @@ class EWC(BaseAgent):
             loss.backward()
 
         grad = dict({})
-        weights = dict({})
+        crt_ref_params = dict({})
         for name, param in model.named_parameters():
             if param.requires_grad:
-                weights[name] = param.detach().clone()
+                crt_ref_params[name] = param.detach().clone()
                 grad[name] = param.grad.detach().clone()
                 grad[name].pow_(2)
                 if name in elasticity:
@@ -101,12 +96,5 @@ class EWC(BaseAgent):
                 else:
                     elasticity[name] = grad[name].clone()
 
-        self.weights.append(weights)
+        self.ref_params.append(crt_ref_params)
         self.elasticities.append(grad)
-
-
-
-
-
-
-

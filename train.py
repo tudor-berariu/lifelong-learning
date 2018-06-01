@@ -65,6 +65,8 @@ def run(args: Args, multitask: MultiTask = None) -> None:
         agent_class = get_agent(args.lifelong.mode)
         agent = agent_class(init_model, get_optim, multitask, args)
         agent.train_sequentially()
+    else:
+        raise ValueError
 
 
 def main(args: Args):
