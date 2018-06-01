@@ -4,7 +4,9 @@ from typing import Type
 from .base_agent import BaseAgent
 
 ALL_AGENTS = {
+    # "<config_name>": ("<module_name>", "<class_name>")
     "baseline": ("base_agent", "BaseAgent"),
+    "ewc": ("ewc", "EWC")
 }
 
 
