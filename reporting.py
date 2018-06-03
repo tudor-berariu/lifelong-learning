@@ -571,10 +571,13 @@ class Reporting(object):
 
         if self.push_to_server:
             try:
-                res = self.es.index(index='phd',  doc_type='lifelong',
-                                    body=data)
+                res = self.es.index(index='phd',  doc_type='lifelong', body=data)
             except:
                 e = sys.exc_info()[0]
+                print(clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
+                print(clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
+                print(clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
+                print("\nPLEASE do manual push :)")
                 print(e)
 
                 with open(os.path.join(self.out_dir,'error_elasticsearch.pickle'), 'wb') as handle:

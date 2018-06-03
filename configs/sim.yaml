@@ -8,7 +8,7 @@ tasks:
   in_size: [3, 32, 32]
   reset_targets: False
   validation: 0
-  split: False
+  split: 0
   perms_no: 5
   permute_targets: no
   common_head: no

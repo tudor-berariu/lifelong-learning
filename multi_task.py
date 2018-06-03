@@ -122,13 +122,16 @@ class MultiTask(object):
 
     def __init__(self, args: Args) -> None:
 
+        assert args.tasks.split >= 1, "args.tasks.split Must be int bigger than 0"
+        assert args.tasks.perms_no >= 1, "args.tasks.perms_no Must be int bigger than 0"
+
         device: torch.device = torch.device(args.device)
         datasets = args.tasks.datasets  # type: List[str]
         self._in_size = in_size = torch.Size(args.tasks.in_size)
         reset_targets = args.tasks.reset_targets  # type: bool
         validation = args.tasks.validation  # type: float
-        split = args.tasks.split if args.tasks.split else 1
-        perms_no = args.tasks.perms_no if args.tasks.perms_no else 1
+        split = args.tasks.split
+        perms_no = args.tasks.perms_no
         permute_targets = args.tasks.permute_targets  # type: bool
         self.common_head = common_head = args.tasks.common_head  # type: bool
 
