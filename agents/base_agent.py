@@ -7,6 +7,7 @@ from torch import Tensor
 from typing import Union, Callable, Any, List, Dict, Iterator, Tuple, Type
 import os
 import numpy as np
+from tabulate import tabulate
 
 # Project imports
 from my_types import Args
@@ -114,13 +115,15 @@ class BaseAgent(object):
 
             print(f"Training on task {train_task_idx:d}: {task_name:s}.")
 
+            self._start_train_task()  # TEMPLATE
+
             # Train each task for a number of epochs
             for self.crt_task_epoch in range(self.epochs_per_task):
                 crt_epoch = self.crt_task_epoch
 
                 # Train task 1 epoch
-                train_loss, train_acc, seen, info = self._train_task(train_task_idx, train_loader,
-                                                                     crt_epoch)
+                train_loss, train_acc, seen, info = self._train_epoch(train_task_idx, train_loader,
+                                                                      crt_epoch)
 
                 # Get information to feed to reporting agent
                 train_info = {"acc": train_acc, "loss": train_loss}
@@ -154,6 +157,8 @@ class BaseAgent(object):
 
                 self.all_epochs += 1
 
+            self._end_train_task()
+
             report.save()
 
             report.finished_training_task(train_task_idx+1, self.seen)
@@ -162,24 +167,24 @@ class BaseAgent(object):
 
         report.save(final=True)
 
-    def batch_update_auxiliary_losses(self, info):
+    def batch_update_auxiliary_losses(self, info: dict) -> None:
         for key, value in info.items():
             if key.startswith("loss_"):
                 meter = self._batch_aux_losses.setdefault(key, AverageMeter())
                 meter.update(value)
 
-    def batch_print_aux_losses(self):
-        msg = ""
+    def batch_print_aux_losses(self) -> None:
+        table = []
         for key, meter in self._batch_aux_losses.items():
-            msg += f'\t[{key[5:]:s}] crt: {meter.val:3.4f}  avg: {meter.avg:3.4f}'
-        return msg
+            table.append([key[5:], meter.val, meter.avg])
+        print(tabulate(table, headers=["Loss", "Crt.", "Avg."]))
 
-    def _train_task(self, task_idx: int, train_loader: Union[TaskDataLoader, Iterator[Batch]],
-                    epoch: int, max_batch: int = np.inf) -> Tuple[float, float, int, Dict]:
+    def _train_epoch(self, task_idx: int, train_loader: Union[TaskDataLoader, Iterator[Batch]],
+                     epoch: int, max_batch: int = np.inf) -> Tuple[float, float, int, Dict]:
 
         self.crt_train_info = info = dict({})
 
-        self._start_train_task()  # TEMPLATE
+        self._start_train_epoch()
 
         report_or_not = self._train_batch_report
         print_freq = self._train_batch_show_freq
@@ -219,10 +224,10 @@ class BaseAgent(object):
                     if (batch_idx + 1) % print_freq == 0 or batch_idx == last_batch:
                         print(f'\t\t[Train] [Epoch: {epoch:3}] [Batch: {batch_idx:5}]:\t '
                               f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
-                              f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}' +
-                              self.batch_print_aux_losses())
+                              f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
+                        self.batch_print_aux_losses()
 
-        self._end_train_task()  # TEMPLATE
+        self._end_train_epoch()
 
         return losses.avg, correct_cnt / float(seen_epoch), seen_epoch, info
 
@@ -314,6 +319,12 @@ class BaseAgent(object):
         pass
 
     def _end_train_task(self):
+        pass
+
+    def _start_train_epoch(self):
+        pass
+
+    def _end_train_epoch(self):
         pass
 
     def _start_eval_task(self):

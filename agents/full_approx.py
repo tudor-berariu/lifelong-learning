@@ -10,15 +10,16 @@ from termcolor import colored as clr
 from .base_agent import BaseAgent
 from reporting import Reporting
 
-Constraint = NamedTuple("Constraint", [("task_idx", int),
-                                       ("epoch", int),
-                                       ("mode", Dict[str, Tensor]),
-                                       ("elasticity", Dict[str, Tensor])])
+FullConstraint = NamedTuple("FullConstraint", [("task_idx", int),
+                                               ("epoch", int),
+                                               ("mode", Dict[str, Tensor]),
+                                               ("gradient", Dict[str, Tensor]),
+                                               ("diag_hessian", Dict[str, Tensor])])
 
 
-class EWC(BaseAgent):
+class FullApprox(BaseAgent):
     def __init__(self, *args, **kwargs):
-        super(EWC, self).__init__(*args, **kwargs)
+        super(FullApprox, self).__init__(*args, **kwargs)
 
         args = self._args
         agent_args = args.lifelong
@@ -49,8 +50,9 @@ class EWC(BaseAgent):
                 for name, param in model.named_parameters():
                     if param.requires_grad:
                         loss_name = "loss_" + name
-                        layer_loss = torch.dot(constraint.elasticity[name],
-                                               (constraint.mode[name] - param.view(-1)).pow(2))
+                        diff = param.view(-1) - constraint.mode[name]
+                        layer_loss = torch.dot(diff, constraint.gradient[name]) + \
+                            .5 * torch.dot(diff * diff, constraint.diag_hessian[name])
                         loss_per_layer[loss_name] = layer_loss.item() + \
                             loss_per_layer.get(loss_name, 0)
                         total_elastic_loss += layer_loss
@@ -84,20 +86,26 @@ class EWC(BaseAgent):
 
         if self.merge_elasticities and self.constraints:
             # Add to previous matrices if in `merge` mode
-            elasticity = self.constraints[0].elasticity
+            diag_hessian = self.constraints[0].diag_hessian
+            gradient = self.constraints[0].gradient
         else:
-            elasticity = dict({})
+            diag_hessian = dict({})
+            gradient = dict({})
 
         for name, param in model.named_parameters():
             if param.requires_grad:
                 crt_mode[name] = param.detach().clone().view(-1)
-                grad[name] = param.grad.detach().pow(2).clone().view(-1)
-                if name in elasticity:
-                    elasticity[name].add_(grad[name]).view(-1)
+                grad[name] = param.grad.clone().detach().view(-1)
+                grad[name].requires_grad = False
+                if name in gradient:
+                    gradient[name].add_(grad[name])
+                    diag_hessian[name].add_(grad[name] * grad[name])
                 else:
-                    elasticity[name] = grad[name].clone().view(-1)
+                    gradient[name] = grad[name]
+                    diag_hessian[name] = grad[name] * grad[name]
 
-        new_constraint = Constraint(self.crt_task_idx, self.crt_task_epoch, crt_mode, elasticity)
+        new_constraint = FullConstraint(self.crt_task_idx, self.crt_task_epoch, crt_mode,
+                                        gradient, diag_hessian)
         if self.merge_elasticities:
             # Remove old constraints if in `merge` mode
             self.constraints.clear()

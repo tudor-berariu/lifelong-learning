@@ -6,7 +6,9 @@ from .base_agent import BaseAgent
 ALL_AGENTS = {
     # "<config_name>": ("<module_name>", "<class_name>")
     "baseline": ("base_agent", "BaseAgent"),
-    "ewc": ("ewc", "EWC")
+    "ewc": ("ewc", "EWC"),
+    "full_approx": ("full_approx", "FullApprox"),
+    "seq_laplace": ("sequential_laplace_approximation", "SequentialLaplaceApproximation")
 }
 
 
