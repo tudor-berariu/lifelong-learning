@@ -571,7 +571,7 @@ class Reporting(object):
 
         if self.push_to_server:
             try:
-                res = self.es.index(index='tw',  doc_type='lifelong',
+                res = self.es.index(index='phd',  doc_type='lifelong',
                                     body=data)
             except:
                 e = sys.exc_info()[0]
