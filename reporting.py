@@ -7,11 +7,15 @@ import subprocess
 from termcolor import colored as clr
 from torch import nn
 from shutil import copyfile
+import json
+from liftoff.config import namespace_to_dict
+import datetime
 
 from my_types import Args
 
 Accuracy = float
 Loss = float
+
 
 EvalResult = NamedTuple(
     "EvalResult",
@@ -85,7 +89,7 @@ class Reporting(object):
     def __init__(self, args: Args, task_info: List[Dict], model_summary: Dict = dict({}),
                  files_to_save: List[str] = []):
 
-        self._args = args
+        self._args = namespace_to_dict(args)
         self._task_info = task_info
 
         self.title = args.title
@@ -96,6 +100,7 @@ class Reporting(object):
         self.use_comet = args.reporting.plot_comet
         self.save_report_trace = args.reporting.save_report_trace
         self.min_save = min_save = args.reporting.min_save
+        self.push_to_server = args.reporting.push_to_server
 
         # Register model summary
         self._model_summary = None
@@ -126,7 +131,8 @@ class Reporting(object):
         self._trained_before_eval = []
         self._has_evaluated = False
 
-        self._start_time = time.time()
+        self._start_timestamp = time.time()
+        self._start_time = datetime.datetime.now()
 
         self._train_trace = dict({})
         self._eval_trace = dict({})
@@ -153,17 +159,22 @@ class Reporting(object):
         })
 
         # The following variables will be saved in a dictionary
-        self._save_variables = ["_start_time", "_args",
+        self.big_data = ["_train_trace", "_eval_trace"]
+        self._save_variables = ["_start_time", "_start_timestamp", "_args",
                                 "_best_eval", "_last_eval", "_task_info", "_task_train_tick",
                                 "_eval_metrics", "_model_summary"]
         if self.save_report_trace:
-            self._save_variables.extend(["_train_trace", "_eval_trace"])
+            self._save_variables.extend(self.big_data)
 
         # Plot data
         self.plot_t: TensorboardSummary = self._init_tensorboard(
         ) if self.use_tensorboard and not min_save else None
         # self.plot_c: Experiment = self._init_comet_ml() if self.use_comet else None
         self.plot_c = None
+
+        self.es = None
+        if self.push_to_server:
+            self.init_elastic_server()
 
     def _init_tensorboard(self):
         # -- Tensorboard SummaryWriter
@@ -172,6 +183,10 @@ class Reporting(object):
             auto_start_board=self._args.reporting.tensorboard_auto_start
         )
         return plot_t
+
+    def init_elastic_server(self):
+        from elasticsearch import Elasticsearch
+        self.es = Elasticsearch([{'host': 'localhost', 'port': 9200}])
 
     def register_model(self, model_summary: Dict):
         if self.min_save:
@@ -192,8 +207,6 @@ class Reporting(object):
                 f.write(str(k) + " :: \n")
                 f.write(str(v))
             f.writelines(["\n", "\n"])
-
-
 
     @property
     def tb(self):
@@ -512,9 +525,13 @@ class Reporting(object):
 
         return global_avg
 
-    def save(self):
+    def save(self, final=False):
         save_data = {key: self.__dict__[key] for key in self._save_variables}
+        if final:
+            save_data["_end_time"] = datetime.datetime.now()
         torch.save(save_data, self._save_path)
+        if final:
+            self.experiment_finished(save_data)
 
     @staticmethod
     def _show_task_result(idx: int, task_name: str, acc: float, loss: float,
@@ -533,3 +550,32 @@ class Reporting(object):
             msg += f" {clr('*', 'red', attrs=['bold'])}"
 
         print(msg)
+
+    def experiment_finished(self, save_data: Dict):
+        import sys
+        import pickle
+
+        save_data = save_data.copy()
+
+        for k in self.big_data:
+            save_data.pop(k, None)
+
+        # Bad for elasticsearch
+        save_data["_args"]["model"]["_conv"] = str(save_data["_args"]["model"]["_conv"])
+
+        data = dict({})
+        for k, v in save_data.items():
+            while k[0] == "_":
+                k = k[1:]
+            data[k] = v
+
+        if self.push_to_server:
+            try:
+                res = self.es.index(index='tw',  doc_type='lifelong',
+                                    body=data)
+            except:
+                e = sys.exc_info()[0]
+                print(e)
+
+                with open(os.path.join(self.out_dir,'error_elasticsearch.pickle'), 'wb') as handle:
+                    pickle.dump(e, handle, protocol=pickle.HIGHEST_PROTOCOL)

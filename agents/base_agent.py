@@ -160,7 +160,7 @@ class BaseAgent(object):
 
         self._end_experiment()  # TEMPLATE
 
-        report.save()
+        report.save(final=True)
 
     def batch_update_auxiliary_losses(self, info):
         for key, value in info.items():
