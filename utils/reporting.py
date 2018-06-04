@@ -7,6 +7,7 @@ from termcolor import colored as clr
 from shutil import copyfile
 from liftoff.config import namespace_to_dict
 import datetime
+import subprocess
 
 from my_types import Args
 
@@ -87,8 +88,8 @@ class TensorboardSummary(object):
 
 class Reporting(object):
 
-    def __init__(self, args: Args, task_info: List[Dict], model_summary: Dict = dict({}),
-                 files_to_save: List[str] = []):
+    def __init__(self, args: Args, task_info: List[Dict], model_summary: Dict = dict(),
+                 files_to_save: List[str] = list()):
 
         self._args = namespace_to_dict(args)
         self._task_info = task_info
@@ -190,7 +191,7 @@ class Reporting(object):
         # -- Tensorboard SummaryWriter
         plot_t = TensorboardSummary(
             self.title, path_to_save=self.out_dir,
-            auto_start_board=self._args.reporting.tensorboard_auto_start
+            auto_start_board=self._args["reporting"]["tensorboard_auto_start"]
         )
         return plot_t
 
@@ -675,21 +676,3 @@ class Reporting(object):
             print(f"SERVER_SCRIP Response {sts}")
 
         return 0
-
-
-if __name__ == "__main__":
-    import subprocess
-    from utils.pid_wait import wait_pid
-    # sts = wait_pid(p.pid, timeout=1)
-    # "tempuser@141.85.232.73:/home/tempuser/workspace/andrei/lifelong_tmp_data/"
-
-    p = subprocess.Popen("wc -c /media/andrei/CE04D7C504D7AF291/rl/lifelong-learning/results"
-                                "/results |"
-                          " awk \'{print $1}\'", shell=True, stdout=subprocess.PIPE)
-    sts = wait_pid(p.pid, timeout=5)
-    result = p.communicate()[0]
-    print("="*79)
-    print(result.split())
-    print("="*79)
-    # print(sts)
-

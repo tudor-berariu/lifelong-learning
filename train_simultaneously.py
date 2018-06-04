@@ -85,4 +85,4 @@ def train_simultaneously(model_class: Type,
 
     report.finished_training_task(1, seen)
 
-    report.save()
+    report.save(final=True)

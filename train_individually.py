@@ -83,4 +83,4 @@ def train_individually(init_model: Callable[[Any], nn.Module],
 
         report.finished_training_task(task_idx+1, seen)
 
-    report.save()
+    report.save(final=True)
