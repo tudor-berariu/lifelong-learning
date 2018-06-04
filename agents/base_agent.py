@@ -26,6 +26,10 @@ class BaseAgent(object):
                  get_optimizer: Callable[[nn.Module], optim.Optimizer],
                  multitask: MultiTask, args: Args):
 
+        self.get_model = get_model
+        self.get_optimizer = get_optimizer
+        self.args = args
+
         self._args = args
         self.epochs_per_task = args.train.epochs_per_task
         self.multitask = multitask
