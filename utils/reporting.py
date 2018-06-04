@@ -3,11 +3,8 @@ import time
 import numpy as np
 import torch
 import os
-import subprocess
 from termcolor import colored as clr
-from torch import nn
 from shutil import copyfile
-import json
 from liftoff.config import namespace_to_dict
 import datetime
 
@@ -16,6 +13,10 @@ from my_types import Args
 Accuracy = float
 Loss = float
 
+REMOTE_HOST = "tempuser@141.85.232.73"
+SERVER_eFOLDER = "/home/tempuser/workspace/andrei/lifelong_tmp_data/"
+SERVER_PYTHON = "/home/tempuser/anaconda3/envs/andreiENV/bin/python"
+SERVER_SCRIPT = "/home/tempuser/workspace/andrei/lifelong-learning/upload_to_elasticsearch.py"
 
 EvalResult = NamedTuple(
     "EvalResult",
@@ -106,6 +107,17 @@ class Reporting(object):
         self._model_summary = None
         self.register_model(model_summary)
 
+        # Folders where Server side reports should be temporarily be moved
+        self.server_eFolder = f"{REMOTE_HOST}:{SERVER_eFOLDER}"
+        base_res_fld = "results/"
+        local_efolder = base_res_fld + "tmp_efolder_data"
+        if not os.path.isdir(local_efolder):
+            assert os.path.isdir("results"), f"There is no base results folder, expected: " \
+                                             f"{base_res_fld}"
+            os.mkdir(local_efolder)
+        assert os.path.isdir(local_efolder), f"There is no temporary local efolder {local_efolder}"
+        self.local_efolder = local_efolder
+
         # Copy files files_to_save
         if not min_save:
             for file_path in files_to_save:
@@ -148,6 +160,7 @@ class Reporting(object):
         self._last_train = self._last_eval.copy()
 
         self._task_train_tick: List[Dict] = []
+        self._last_eval_data: Dict = dict()
         self._eval_metrics: Dict = dict({
             "score_new_raw": [],
             "score_base_raw": [],
@@ -159,10 +172,10 @@ class Reporting(object):
         })
 
         # The following variables will be saved in a dictionary
-        self.big_data = ["_train_trace", "_eval_trace"]
+        self.big_data = ["_train_trace", "_eval_trace", "_task_train_tick"]
         self._save_variables = ["_start_time", "_start_timestamp", "_args",
-                                "_best_eval", "_last_eval", "_task_info", "_task_train_tick",
-                                "_eval_metrics", "_model_summary"]
+                                "_best_eval", "_last_eval", "_task_info",
+                                "_eval_metrics", "_model_summary", "_last_eval_data"]
         if self.save_report_trace:
             self._save_variables.extend(self.big_data)
 
@@ -173,8 +186,6 @@ class Reporting(object):
         self.plot_c = None
 
         self.es = None
-        if self.push_to_server:
-            self.init_elastic_server()
 
     def _init_tensorboard(self):
         # -- Tensorboard SummaryWriter
@@ -183,10 +194,6 @@ class Reporting(object):
             auto_start_board=self._args.reporting.tensorboard_auto_start
         )
         return plot_t
-
-    def init_elastic_server(self):
-        from elasticsearch import Elasticsearch
-        self.es = Elasticsearch([{'host': 'localhost', 'port': 9200}])
 
     def register_model(self, model_summary: Dict):
         if self.min_save:
@@ -552,8 +559,6 @@ class Reporting(object):
         print(msg)
 
     def experiment_finished(self, save_data: Dict):
-        import sys
-        import pickle
 
         save_data = save_data.copy()
 
@@ -562,6 +567,7 @@ class Reporting(object):
 
         # Bad for elasticsearch
         save_data["_args"]["model"]["_conv"] = str(save_data["_args"]["model"]["_conv"])
+        start_time = save_data["_start_time"]
 
         data = dict({})
         for k, v in save_data.items():
@@ -569,16 +575,114 @@ class Reporting(object):
                 k = k[1:]
             data[k] = v
 
-        if self.push_to_server:
-            try:
-                res = self.es.index(index='phd',  doc_type='lifelong', body=data)
-            except:
-                e = sys.exc_info()[0]
-                print(clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
-                print(clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
-                print(clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
-                print("\nPLEASE do manual push :)")
-                print(e)
+        # Move data to local temporary folder
+        basename = str(start_time).replace(".", "_") + "_"
+        filename = basename + "edata.pkl"
+        data_filepath = os.path.join(self.local_efolder, filename)
+        torch.save(data, data_filepath)
 
-                with open(os.path.join(self.out_dir,'error_elasticsearch.pickle'), 'wb') as handle:
-                    pickle.dump(e, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        print(f"eData data moved to {data_filepath}")
+
+        if self.push_to_server:
+            import sys
+            import pickle
+            import subprocess
+            from utils.pid_wait import wait_pid
+            import shutil
+
+            # -- Redirect all std out & errors to tmp_edata file
+            out_filepath = os.path.join(self.local_efolder, basename + "_std_out_err.txt")
+            fsock = open(out_filepath, 'w')
+            old_stdout = sys.stdout
+            old_stderr = sys.stderr
+            sys.stdout = sys.stderr = fsock
+
+            def repair_std():
+                sys.stdout = old_stdout
+                sys.stderr = old_stderr
+                print("=" * 79)
+                with open(out_filepath, "r") as f:
+                    shutil.copyfileobj(f, sys.stdout)
+                print("=" * 79)
+
+            # -- Try to move eData file to server
+            server_efoler = self.server_eFolder
+            server_path = server_efoler + filename
+            p = subprocess.Popen(["scp", data_filepath, server_path])
+            sts = wait_pid(p.pid, timeout=120)
+            if sts == 0:
+                print(f"[eData] Success in moving eData to server. (RESPONSE: {sts}")
+            else:
+                print(f"[eData] ERROR in moving eData to server: RESPONSE: {sts}")
+
+                repair_std()
+
+                return 1
+
+            # -- Check if file was moved so as to delete local file
+            def parse_file_size(res, cmd: str):
+                fsize = -1
+
+                if len(result) == 1:
+                    if res[0].replace('.', '', 1).isnumeric():
+                        fsize = float(result[0])
+                    else:
+                        print(f"[eData] Wrong _{cmd}_ file_size {res[0]}")
+                else:
+                    print(f"[eData] Wrong len of _{cmd}_ wc command return {res}")
+                return fsize
+
+            copied = True
+
+            # Get local size
+            p = subprocess.Popen(f"wc -c {data_filepath} | awk \'{{print $1}}\'",
+                                 shell=True, stdout=subprocess.PIPE)
+            sts = wait_pid(p.pid, timeout=20)
+            result = p.communicate()[0]
+            local_file_size = parse_file_size(result)
+
+            # Get remote size
+            p = subprocess.Popen(f"ssh {REMOTE_HOST} wc -c {server_path} | awk \'{{print $1}}\'",
+                                 shell=True, stdout=subprocess.PIPE)
+            sts = wait_pid(p.pid, timeout=20)
+            result = p.communicate()[0]
+            remote_file_size = parse_file_size(result)
+
+            if local_file_size == remote_file_size and local_file_size > 0:
+                print(f"[eData] We consider file copied successfully")
+                # Delete local files
+                repair_std()
+                fsock.close()
+                os.remove(data_filepath)
+                os.remove(out_filepath)
+            else:
+                print(f"[eData] ERROR something went wrong with copying the file")
+                repair_std()
+                return 2
+
+            # Try to run server side script, that uplods data to elasticsearch
+            files = [server_path]
+            p = subprocess.Popen(["ssh", REMOTE_HOST, "nohup", SERVER_PYTHON, SERVER_SCRIPT]
+                                 + files + ["&"])
+            sts = wait_pid(p.pid, timeout=120)
+            print(f"SERVER_SCRIP Response {sts}")
+
+        return 0
+
+
+if __name__ == "__main__":
+    import subprocess
+    from utils.pid_wait import wait_pid
+    # sts = wait_pid(p.pid, timeout=1)
+    # "tempuser@141.85.232.73:/home/tempuser/workspace/andrei/lifelong_tmp_data/"
+
+    p = subprocess.Popen("wc -c /media/andrei/CE04D7C504D7AF291/rl/lifelong-learning/results"
+                                "/results |"
+                          " awk \'{print $1}\'", shell=True, stdout=subprocess.PIPE)
+    sts = wait_pid(p.pid, timeout=5)
+    result = p.communicate()[0]
+    print("="*79)
+    print(result.split())
+    print("="*79)
+    # print(sts)
+

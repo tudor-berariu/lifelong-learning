@@ -1,14 +1,14 @@
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import MultiStepLR
-from typing import Any, Type, Callable
+from typing import Any, Callable
 import os
 
 # Project imports
 from my_types import Args
 from multi_task import MultiTask
 from utils import standard_train, standard_validate
-from reporting import Reporting
+from utils.reporting import Reporting
 
 
 def train_sequentially(model_class: Callable[[Any], nn.Module],

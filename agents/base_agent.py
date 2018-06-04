@@ -12,7 +12,7 @@ from tabulate import tabulate
 # Project imports
 from my_types import Args
 from multi_task import MultiTask, TaskDataLoader, Batch
-from reporting import Reporting
+from utils.reporting import Reporting
 from utils import AverageMeter, accuracy
 
 

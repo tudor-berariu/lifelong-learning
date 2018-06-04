@@ -9,7 +9,7 @@ from termcolor import colored as clr
 from my_types import Args
 from multi_task import MultiTask
 from utils import standard_train, standard_validate
-from reporting import Reporting
+from utils.reporting import Reporting
 
 
 def train_simultaneously(model_class: Type,

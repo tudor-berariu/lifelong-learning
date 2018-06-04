@@ -1,15 +1,14 @@
-import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import MultiStepLR
-from typing import Type, Callable, Tuple, Any
+from typing import Callable, Any
 from termcolor import colored as clr
 
 # Project imports
 from my_types import Args
 from multi_task import MultiTask
 from utils import standard_train, standard_validate
-from reporting import Reporting
+from utils.reporting import Reporting
 
 
 def train_individually(init_model: Callable[[Any], nn.Module],

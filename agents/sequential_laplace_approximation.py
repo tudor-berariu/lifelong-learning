@@ -1,14 +1,10 @@
 import torch
 from torch import Tensor
-from torch import nn
 import torch.nn.functional as functional
-import torch.optim as optim
-from typing import Union, Callable, Any, List, Dict, Iterator, Tuple, Type, NamedTuple
-from termcolor import colored as clr
+from typing import Union, List, Dict, Tuple, NamedTuple
 
 # Project imports
 from .base_agent import BaseAgent
-from reporting import Reporting
 
 Constraint = NamedTuple("Constraint", [("task_idx", int),
                                        ("epoch", int),
