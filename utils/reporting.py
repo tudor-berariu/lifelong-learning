@@ -16,7 +16,7 @@ Loss = float
 REMOTE_HOST = "tempuser@141.85.232.73"
 SERVER_eFOLDER = "/home/tempuser/workspace/andrei/lifelong_tmp_data/"
 SERVER_PYTHON = "/home/tempuser/anaconda3/envs/andreiENV/bin/python"
-SERVER_SCRIPT = "/home/tempuser/workspace/andrei/lifelong-learning/upload_to_elasticsearch.py"
+SERVER_SCRIPT = "/home/tempuser/workspace/andrei/lifelong-learning/utils/upload_to_elasticsearch.py"
 
 EvalResult = NamedTuple(
     "EvalResult",
@@ -108,7 +108,6 @@ class Reporting(object):
         self.register_model(model_summary)
 
         # Folders where Server side reports should be temporarily be moved
-        self.server_eFolder = f"{REMOTE_HOST}:{SERVER_eFOLDER}"
         base_res_fld = "results/"
         local_efolder = base_res_fld + "tmp_efolder_data"
         if not os.path.isdir(local_efolder):
@@ -567,7 +566,7 @@ class Reporting(object):
 
         # Bad for elasticsearch
         save_data["_args"]["model"]["_conv"] = str(save_data["_args"]["model"]["_conv"])
-        start_time = save_data["_start_time"]
+        start_time = save_data["_start_timestamp"]
 
         data = dict({})
         for k, v in save_data.items():
@@ -606,9 +605,9 @@ class Reporting(object):
                 print("=" * 79)
 
             # -- Try to move eData file to server
-            server_efoler = self.server_eFolder
-            server_path = server_efoler + filename
-            p = subprocess.Popen(["scp", data_filepath, server_path])
+            server_path = SERVER_eFOLDER + filename
+            p = subprocess.Popen(["scp", data_filepath, f"{REMOTE_HOST}:{server_path}"],
+                                 stdout=fsock, stderr=fsock)
             sts = wait_pid(p.pid, timeout=120)
             if sts == 0:
                 print(f"[eData] Success in moving eData to server. (RESPONSE: {sts}")
@@ -623,48 +622,56 @@ class Reporting(object):
             def parse_file_size(res, cmd: str):
                 fsize = -1
 
-                if len(result) == 1:
-                    if res[0].replace('.', '', 1).isnumeric():
-                        fsize = float(result[0])
-                    else:
-                        print(f"[eData] Wrong _{cmd}_ file_size {res[0]}")
+                if hasattr(res, "strip"):
+                    res = res.strip().decode("utf-8")
                 else:
-                    print(f"[eData] Wrong len of _{cmd}_ wc command return {res}")
-                return fsize
+                    print(f"[eData] res is not string {res}")
+                    return fsize
 
-            copied = True
+                if res.replace('.', '', 1).isnumeric():
+                    fsize = float(res)
+                else:
+                    print(f"[eData] Wrong _{cmd}_ file_size {res}")
+
+                return fsize
 
             # Get local size
             p = subprocess.Popen(f"wc -c {data_filepath} | awk \'{{print $1}}\'",
-                                 shell=True, stdout=subprocess.PIPE)
+                                 shell=True, stdout=subprocess.PIPE, stderr=fsock)
             sts = wait_pid(p.pid, timeout=20)
             result = p.communicate()[0]
-            local_file_size = parse_file_size(result)
+            local_file_size = parse_file_size(result, "local")
 
             # Get remote size
             p = subprocess.Popen(f"ssh {REMOTE_HOST} wc -c {server_path} | awk \'{{print $1}}\'",
-                                 shell=True, stdout=subprocess.PIPE)
+                                 shell=True, stdout=subprocess.PIPE, stderr=fsock)
             sts = wait_pid(p.pid, timeout=20)
             result = p.communicate()[0]
-            remote_file_size = parse_file_size(result)
+            remote_file_size = parse_file_size(result, "remote")
+
+            repair_std()
+            fsock.close()
 
             if local_file_size == remote_file_size and local_file_size > 0:
                 print(f"[eData] We consider file copied successfully")
                 # Delete local files
-                repair_std()
-                fsock.close()
                 os.remove(data_filepath)
                 os.remove(out_filepath)
             else:
                 print(f"[eData] ERROR something went wrong with copying the file")
-                repair_std()
                 return 2
 
             # Try to run server side script, that uplods data to elasticsearch
             files = [server_path]
-            p = subprocess.Popen(["ssh", REMOTE_HOST, "nohup", SERVER_PYTHON, SERVER_SCRIPT]
-                                 + files + ["&"])
+
+            # p = subprocess.Popen(["ssh", REMOTE_HOST, "nohup", SERVER_PYTHON, SERVER_SCRIPT]
+            #                      + files + ["&"])
+
+            p = subprocess.Popen(["ssh", REMOTE_HOST, SERVER_PYTHON, SERVER_SCRIPT]
+                                 + files)
+
             sts = wait_pid(p.pid, timeout=120)
+
             print(f"SERVER_SCRIP Response {sts}")
 
         return 0
