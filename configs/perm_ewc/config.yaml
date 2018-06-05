@@ -1,37 +1,16 @@
-tasks:
-  datasets:
-    - ['fashion', 'mnist', 'cifar10', 'svhn']
-    - ['fashion', 'mnist', 'svhn', 'cifar10']
-    - ['fashion', 'cifar10', 'mnist', 'svhn']
-    - ['fashion', 'cifar10', 'svhn', 'mnist']
-    - ['fashion', 'svhn', 'mnist', 'cifar10']
-    - ['fashion', 'svhn', 'cifar10', 'mnist']
-    - ['mnist', 'fashion', 'cifar10', 'svhn']
-    - ['mnist', 'fashion', 'svhn', 'cifar10']
-    - ['mnist', 'cifar10', 'fashion', 'svhn']
-    - ['mnist', 'cifar10', 'svhn', 'fashion']
-    - ['mnist', 'svhn', 'fashion', 'cifar10']
-    - ['mnist', 'svhn', 'cifar10', 'fashion']
-    - ['cifar10', 'fashion', 'mnist', 'svhn']
-    - ['cifar10', 'fashion', 'svhn', 'mnist']
-    - ['cifar10', 'mnist', 'fashion', 'svhn']
-    - ['cifar10', 'mnist', 'svhn', 'fashion']
-    - ['cifar10', 'svhn', 'fashion', 'mnist']
-    - ['cifar10', 'svhn', 'mnist', 'fashion']
-    - ['svhn', 'fashion', 'mnist', 'cifar10']
-    - ['svhn', 'fashion', 'cifar10', 'mnist']
-    - ['svhn', 'mnist', 'fashion', 'cifar10']
-    - ['svhn', 'mnist', 'cifar10', 'fashion']
-    - ['svhn', 'cifar10', 'fashion', 'mnist']
-    - ['svhn', 'cifar10', 'mnist', 'fashion']
-
-model:
-  name: ["mlp", "lenet"]
-  hidden_units: [[100, 100], [100], [500]]
+lifelong:
+  mode: ewc
+  scale: [0.1, 1, 3, 10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000]
+  merge_elasticities: [True, False]
 
 train:
+  epochs_per_task: [10, 20]
+  batch_size: [256, 1024]
   _optimizer:
     - {"__name": "Adam 0.001", "name": Adam, "optimizer_args": {"lr": 0.001}}
     - {"__name": "RMSprop 0.001", "name": RMSprop, "optimizer_args": {"lr": 0.001}}
+    - {"__name": "Adam 0.0001", "name": Adam, "optimizer_args": {"lr": 0.0001}}
+    - {"__name": "RMSprop 0.0001", "name": RMSprop, "optimizer_args": {"lr": 0.0001}}
     - {"__name": "SGD 0.01 +M 0.95", "name": SGD, "optimizer_args": {"lr": 0.01, "momentum": 0.95}}
+    - {"__name": "SGD 0.01 +M 0.95", "name": SGD, "optimizer_args": {"lr": 0.01, "momentum": 0.95}, "lr_decay": {"gamma": 0.1, "step": 5}}
     - {"__name": "SGD 0.1 +Nest 0.9 decay", "name": SGD, "optimizer_args": {"lr": 0.1, "nesterov": True, "momentum": 0.9}, "lr_decay": {"gamma": 0.1, "step": 5}}

@@ -1,4 +1,4 @@
-title: "ALL_FOUR"
+title: "mnist_50_perm_ewc"
 no_cuda: no
 mode: "seq"
 keep_alive: no
@@ -8,8 +8,8 @@ tasks:
   in_size: [3, 32, 32]
   reset_targets: False
   validation: 0
-  split: False
-  perms_no: 0
+  split: 1
+  perms_no: 50
   permute_targets: no
   common_head: yes
 
@@ -22,20 +22,29 @@ model:
   use_softmax: no
 
 lifelong:
-  mode: baseline
+  mode: ewc
+  scale: 10
+  merge_elasticities: False
+  first_task_only: False
+
+  alpha: 0.25
+  g_norm: 2
+  is_signed: False
+  drop_misclassified: False
+  loss_norm: 2
+  do_sample: False
+  signed_on_cpu: True
+
 
 train:
-  batch_size: 256
+  batch_size: 1000
   shuffle: True
-  epochs_per_task: 50
+  epochs_per_task: 20
   stop_if_not_better: 5
   test_batch_size: 0
   _optimizer:
-    name: Adam
-    optimizer_args: { lr: 0.001 }
-    lr_decay:
-      gamma: 0.1
-      step: 1
+    name: SGD
+    optimizer_args: { lr: 0.01, momentum: 0.95}
 
 reporting:
   min_save: yes
@@ -44,13 +53,15 @@ reporting:
   save_report_freq: 5
   save_report_trace: yes
   epoch_report_freq: 1
-  
+
   batch_train_save_freq: 0
-  batch_train_show_freq: 5
+  batch_train_show_freq: 0
   batch_eval_save_freq: 0
   batch_eval_show_freq: 0
 
-  plot_tensorboard: yes
-  tensorboard_auto_start: yes
+  plot_tensorboard: no
+  tensorboard_auto_start: no
   plot_comet: no
   comet_plot_freq_factor: 0.1
+
+  push_to_server: no

@@ -79,6 +79,8 @@ class AndreiTest(BaseAgent):
         loss_per_layer = dict({})
         if task_no > 0:
             for _idx, constraint in enumerate(self.constraints):
+                if constraint.task_idx == task_no:
+                    continue
                 for name, param in model.named_parameters():
                     if param.requires_grad:
                         loss_name = "loss_" + name
@@ -92,9 +94,9 @@ class AndreiTest(BaseAgent):
             loss_per_layer["loss_ewc"] = total_elastic_loss.item()
 
         loss.backward()
-        self._optimizer.step()
 
-        if self.crt_task_epoch < self.epochs_per_task - 1:
+        if self.crt_task_epoch < self.epochs_per_task - 1 or batch_idx < 30:
+            self._optimizer.step()
             return outputs, loss, dict({})
 
         grad = dict({})
@@ -123,7 +125,9 @@ class AndreiTest(BaseAgent):
 
         print(clr(f"There are {len(self.constraints):d} elastic constraints!", attrs=["bold"]))
 
-        return outputs, loss, dict({})
+        self._optimizer.step()
+
+        return outputs, loss, loss_per_layer
 
     def _end_train_task(self):
         # self._init_model(self.get_model, self.get_optimizer, self.args
