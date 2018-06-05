@@ -128,3 +128,41 @@ def standard_validate(val_loader: TaskDataLoader, model: nn.Module, epoch: int,
                       f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
 
         return losses.avg, correct_cnt / float(seen)
+
+
+def get_ip() -> str:
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    ip = s.getsockname()[0]
+    s.close()
+    return ip
+
+
+def redirect_std(out_filepath):
+    import sys
+
+    fsock = open(out_filepath, 'w')
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    sys.stdout = sys.stderr = fsock
+
+    return fsock, old_stdout, old_stderr
+
+
+def repair_std(out_filepath, fsock, old_stdout, old_stderr):
+    import sys, shutil
+
+    fsock.close()
+    sys.stdout = old_stdout
+    sys.stderr = old_stderr
+    print("=" * 79)
+    with open(out_filepath, "r") as f:
+        shutil.copyfileobj(f, sys.stdout)
+    print("=" * 79)
+
+
+def get_utc_time():
+    import datetime
+    import pytz
+    return datetime.datetime.now(tz=pytz.utc)

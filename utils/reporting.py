@@ -6,14 +6,15 @@ import os
 from termcolor import colored as clr
 from shutil import copyfile
 from liftoff.config import namespace_to_dict
-import datetime
 import subprocess
 
 from my_types import Args
+from .utils import get_ip, redirect_std, repair_std, get_utc_time
 
 Accuracy = float
 Loss = float
 
+REMOTE_IP = "141.85.232.73"
 REMOTE_HOST = "tempuser@141.85.232.73"
 SERVER_eFOLDER = "/home/tempuser/workspace/andrei/lifelong_tmp_data/"
 SERVER_PYTHON = "/home/tempuser/anaconda3/envs/andreiENV/bin/python"
@@ -25,6 +26,7 @@ EvalResult = NamedTuple(
      ("dataset_avg", Dict[str, Dict[str, float]]),
      ("global_avg", Dict[str, float])]
 )
+
 
 
 class TensorboardSummary(object):
@@ -144,7 +146,7 @@ class Reporting(object):
         self._has_evaluated = False
 
         self._start_timestamp = time.time()
-        self._start_time = datetime.datetime.now()
+        self._start_time = get_utc_time()
 
         self._train_trace = dict({})
         self._eval_trace = dict({})
@@ -535,7 +537,7 @@ class Reporting(object):
     def save(self, final=False):
         save_data = {key: self.__dict__[key] for key in self._save_variables}
         if final:
-            save_data["_end_time"] = datetime.datetime.now()
+            save_data["_end_time"] = get_utc_time()
         torch.save(save_data, self._save_path)
         if final:
             self.experiment_finished(save_data)
@@ -592,32 +594,28 @@ class Reporting(object):
 
             # -- Redirect all std out & errors to tmp_edata file
             out_filepath = os.path.join(self.local_efolder, basename + "_std_out_err.txt")
-            fsock = open(out_filepath, 'w')
-            old_stdout = sys.stdout
-            old_stderr = sys.stderr
-            sys.stdout = sys.stderr = fsock
 
-            def repair_std():
-                sys.stdout = old_stdout
-                sys.stderr = old_stderr
-                print("=" * 79)
-                with open(out_filepath, "r") as f:
-                    shutil.copyfileobj(f, sys.stdout)
-                print("=" * 79)
+            fsock, old_stdout, old_stderr = redirect_std(out_filepath)
+
+            # Get ip
+            local_ip = get_ip()
 
             # -- Try to move eData file to server
             server_path = SERVER_eFOLDER + filename
-            p = subprocess.Popen(["scp", data_filepath, f"{REMOTE_HOST}:{server_path}"],
-                                 stdout=fsock, stderr=fsock)
-            sts = wait_pid(p.pid, timeout=120)
-            if sts == 0:
-                print(f"[eData] Success in moving eData to server. (RESPONSE: {sts}")
+            if local_ip != REMOTE_HOST:
+                p = subprocess.Popen(["scp", data_filepath, f"{REMOTE_HOST}:{server_path}"],
+                                     stdout=fsock, stderr=fsock)
+                sts = wait_pid(p.pid, timeout=120)
+                if sts == 0:
+                    print(f"[eData] Success in moving eData to server. (RESPONSE: {sts}")
+                else:
+                    print(f"[eData] ERROR in moving eData to server: RESPONSE: {sts}")
+
+                    repair_std(out_filepath, fsock, old_stdout, old_stderr)
+
+                    return 1
             else:
-                print(f"[eData] ERROR in moving eData to server: RESPONSE: {sts}")
-
-                repair_std()
-
-                return 1
+                shutil.copy(data_filepath, server_path)
 
             # -- Check if file was moved so as to delete local file
             def parse_file_size(res, cmd: str):
@@ -636,6 +634,10 @@ class Reporting(object):
 
                 return fsize
 
+            remote_cmd = ""
+            if local_ip != REMOTE_HOST:
+                remote_cmd = f"ssh {REMOTE_HOST} "
+
             # Get local size
             p = subprocess.Popen(f"wc -c {data_filepath} | awk \'{{print $1}}\'",
                                  shell=True, stdout=subprocess.PIPE, stderr=fsock)
@@ -644,14 +646,13 @@ class Reporting(object):
             local_file_size = parse_file_size(result, "local")
 
             # Get remote size
-            p = subprocess.Popen(f"ssh {REMOTE_HOST} wc -c {server_path} | awk \'{{print $1}}\'",
+            p = subprocess.Popen(remote_cmd + f"wc -c {server_path} | awk \'{{print $1}}\'",
                                  shell=True, stdout=subprocess.PIPE, stderr=fsock)
             sts = wait_pid(p.pid, timeout=20)
             result = p.communicate()[0]
             remote_file_size = parse_file_size(result, "remote")
 
-            repair_std()
-            fsock.close()
+            repair_std(out_filepath, fsock, old_stdout, old_stderr)
 
             if local_file_size == remote_file_size and local_file_size > 0:
                 print(f"[eData] We consider file copied successfully")
@@ -663,14 +664,11 @@ class Reporting(object):
                 return 2
 
             # Try to run server side script, that uplods data to elasticsearch
-            files = [server_path]
 
-            # p = subprocess.Popen(["ssh", REMOTE_HOST, "nohup", SERVER_PYTHON, SERVER_SCRIPT]
-            #                      + files + ["&"])
-
-            p = subprocess.Popen(["ssh", REMOTE_HOST, SERVER_PYTHON, SERVER_SCRIPT]
-                                 + files)
-
+            # p = subprocess.Popen(remote_cmd + f"nohup {SERVER_PYTHON} {SERVER_SCRIPT} "
+            #                                   f"{server_path} &", shell=True)
+            p = subprocess.Popen(remote_cmd + f"{SERVER_PYTHON} {SERVER_SCRIPT} {server_path}",
+                                 shell=True)
             sts = wait_pid(p.pid, timeout=120)
 
             print(f"SERVER_SCRIP Response {sts}")
