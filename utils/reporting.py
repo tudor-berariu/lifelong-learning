@@ -10,7 +10,7 @@ import subprocess
 from argparse import Namespace
 
 from my_types import Args
-from utils.utils import get_ip, redirect_std, repair_std, get_utc_time
+from utils.util import get_ip, redirect_std, repair_std, get_utc_time
 from utils.elasticsearch_utils import mark_uploaded_name
 
 Accuracy = float
