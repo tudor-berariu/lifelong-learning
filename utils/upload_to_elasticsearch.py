@@ -23,6 +23,29 @@ def init_elastic_client():
     return Elasticsearch([{'host': 'localhost', 'port': 9200}])
 
 
+def fix_data(data: Dict):
+    # -- Remove non_mapping data such as (NaN inf)
+    # Horrible hack
+    non_serializable = dict()
+    for k in NON_SERIALIZABLE_KEYS:
+        if k in data:
+            non_serializable[k] = data[k]
+
+    serializable = data.copy()
+    for k in NON_SERIALIZABLE_KEYS:
+        serializable.pop(k, None)
+
+    s = json.dumps(serializable)
+    for k, v in CHANGE.items():
+        s = re.sub(k, v, s)
+    serializable = json.loads(s)
+
+    data = non_serializable
+    data.update(serializable)
+
+    return data
+
+
 def upload_to_elastic(file_paths: List[str]):
     es: Elasticsearch = None
 
@@ -46,24 +69,7 @@ def upload_to_elastic(file_paths: List[str]):
 
         data: Dict = torch.load(file_path)
 
-        # -- Remove non_mapping data such as (NaN inf)
-        # Horrible hack
-        non_serializable = dict()
-        for k in NON_SERIALIZABLE_KEYS:
-            if k in data:
-                non_serializable[k] = data[k]
-
-        serializable = data.copy()
-        for k in NON_SERIALIZABLE_KEYS:
-            serializable.pop(k, None)
-
-        s = json.dumps(serializable)
-        for k, v in CHANGE.items():
-            s = re.sub(k, v, s)
-        serializable = json.loads(s)
-
-        data = non_serializable
-        data.update(serializable)
+        data = fix_data(data)
 
         try:
             res = es.index(index='phd',  doc_type='lifelong', body=data)

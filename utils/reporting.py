@@ -699,6 +699,11 @@ class Reporting(object):
         if isinstance(data["_start_time"], float):
             data["_start_time"] = datetime.datetime.utcfromtimestamp(data["_start_time"])
 
+        if isinstance(data["_args"]["tasks"]["split"], bool):
+            data["_args"]["tasks"]["split"] = 1
+        if isinstance(data["_args"]["tasks"]["perms_no"], bool):
+            data["_args"]["tasks"]["perms_no"] = 1
+
         new_data = dict({})
         for k, v in data.items():
             while k[0] == "_":
