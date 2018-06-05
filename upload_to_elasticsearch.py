@@ -19,6 +19,7 @@ CHANGE = {
     " Infinity": " 999999999",
     " -Infinity": " -999999999",
 }
+
 NON_SERIALIZABLE_KEYS = ["start_time", "end_time"]
 
 

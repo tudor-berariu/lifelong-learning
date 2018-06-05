@@ -20,7 +20,7 @@ REMOTE_IP = "141.85.232.73"
 REMOTE_HOST = "tempuser@141.85.232.73"
 SERVER_eFOLDER = "/home/tempuser/workspace/andrei/lifelong_tmp_data/"
 SERVER_PYTHON = "/home/tempuser/anaconda3/envs/andreiENV/bin/python"
-SERVER_SCRIPT = "/home/tempuser/workspace/andrei/lifelong-learning/utils/upload_to_elasticsearch.py"
+SERVER_SCRIPT = "/home/tempuser/workspace/andrei/lifelong-learning/upload_to_elasticsearch.py"
 
 BIG_DATA_KEYS = ["_train_trace", "_eval_trace", "_task_train_tick"]
 
