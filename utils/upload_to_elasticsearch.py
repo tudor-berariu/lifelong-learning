@@ -11,6 +11,9 @@ import os
 import json
 import re
 
+from .elasticsearch_utils import init_elastic_client, search_by_timestamp
+from .utils import repair_std, redirect_std
+
 CHANGE = {
     " NaN": " 0",
     " Infinity": " 999999999",
@@ -51,30 +54,20 @@ def fix_data(data: Dict):
     return data
 
 
-def upload_to_elastic(file_paths: List[str]):
-    es: Elasticsearch = None
+def upload_to_elastic(file_paths: List[str], force_update:bool = False):
+    es: Elasticsearch = init_elastic_client()
 
     for file_path in file_paths:
-        out_filepath = file_path + "_out"
-        fsock = open(out_filepath, 'w')
-        old_stdout = sys.stdout
-        old_stderr = sys.stderr
-        sys.stdout = sys.stderr = fsock
-
-        def repair_std():
-            sys.stdout = old_stdout
-            sys.stderr = old_stderr
-            print("=" * 79)
-            with open(out_filepath, "r") as f:
-                shutil.copyfileobj(f, sys.stdout)
-            print("=" * 79)
-
-        if not es:
-            es = init_elastic_client()
-
         data: Dict = torch.load(file_path)
-
         data = fix_data(data)
+        _, found_items = search_by_timestamp(data["start_timestamp"])
+
+        if not force_update and found_items > 0:
+            print(f"[ERROR] Already found item in database: {file_path}")
+            continue
+
+        out_filepath = file_path + "_out"
+        fsock, old_stdout, old_stderr = redirect_std(out_filepath)
 
         try:
             res = es.index(index='phd',  doc_type='lifelong', body=data)
@@ -88,8 +81,8 @@ def upload_to_elastic(file_paths: List[str]):
                                       limit=100, file=sys.stdout)
 
         if res["result"] == "created":
-            repair_std()
-            fsock.close()
+            repair_std(out_filepath, fsock, old_stdout, old_stderr)
+
             os.remove(file_path)
             os.remove(out_filepath)
 

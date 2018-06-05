@@ -11,7 +11,7 @@ from argparse import Namespace
 
 from my_types import Args
 from .utils import get_ip, redirect_std, repair_std, get_utc_time
-
+from .elasticsearch_utils import mark_uploaded_name
 
 Accuracy = float
 Loss = float
@@ -546,7 +546,8 @@ class Reporting(object):
         if final:
             self.experiment_finished(save_data, ignore_keys=self.big_data,
                                      local_efolder=self.local_efolder,
-                                     push_to_server=self.push_to_server)
+                                     push_to_server=self.push_to_server,
+                                     file_path=self._save_path)
 
     @staticmethod
     def _show_task_result(idx: int, task_name: str, acc: float, loss: float,
@@ -569,13 +570,22 @@ class Reporting(object):
     @staticmethod
     def experiment_finished(save_data: Union[Dict, str], ignore_keys: List[str] = BIG_DATA_KEYS,
                             local_efolder: str = "results/tmp_efolder_data",
-                            push_to_server: bool = True):
+                            push_to_server: bool = True, mark_file_sent: bool = True,
+                            file_path: str = None, force_reupload: bool = False):
 
         save_data_path = None
         if isinstance(save_data, str):
             print(f"Load from disk results pkl. ({save_data})")
             save_data_path = save_data
             save_data = torch.load(save_data_path)
+            if file_path is None:
+                file_path = save_data_path
+
+        mark_uploaded_path = mark_uploaded_name(file_path)
+
+        if os.path.isfile(mark_uploaded_path) and not force_reupload:
+            print(f"SKIP UPLOAD. File already marked as uploaded. ({mark_uploaded_path})")
+            return 4
 
         save_data = save_data.copy()
 
@@ -682,6 +692,11 @@ class Reporting(object):
             print(f"SERVER_SCRIP Response {sts}")
 
             print(f"Seems ok: {save_data_path}")
+
+            if mark_file_sent:
+                with open(mark_uploaded_path, "w") as f:
+                    f.writelines([filename, "\n"])
+
         return 0
 
     @staticmethod
@@ -691,7 +706,8 @@ class Reporting(object):
         # Bad for elasticsearch
         if isinstance(data["_args"], Namespace):
             data["_args"] = namespace_to_dict(data["_args"])
-            data["_args"]["model"]["_conv"] = str(data["_args"]["model"]["_conv"])
+
+        data["_args"]["model"]["_conv"] = str(data["_args"]["model"]["_conv"])
 
         if "_start_timestamp" not in data:
             data["_start_timestamp"] = data["_start_time"]
