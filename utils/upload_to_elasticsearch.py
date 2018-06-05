@@ -11,8 +11,8 @@ import os
 import json
 import re
 
-from .elasticsearch_utils import init_elastic_client, search_by_timestamp
-from .utils import repair_std, redirect_std
+from utils.elasticsearch_utils import init_elastic_client, search_by_timestamp
+from utils.utils import repair_std, redirect_std
 
 CHANGE = {
     " NaN": " 0",
