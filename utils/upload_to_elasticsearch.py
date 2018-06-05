@@ -43,6 +43,11 @@ def fix_data(data: Dict):
     data = non_serializable
     data.update(serializable)
 
+    # add no_tasks to args.tasks.no_tasks
+    # add no_datasets to args.tasks.no_datasets
+    data["args"]["tasks"]["no_datasets"] = len(data["args"]["tasks"]["datasets"])
+    data["args"]["tasks"]["no_tasks"] = len(data["task_info"])
+
     return data
 
 
