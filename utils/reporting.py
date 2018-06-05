@@ -1,4 +1,4 @@
-from typing import Dict, List, NamedTuple, Tuple
+from typing import Dict, List, NamedTuple, Tuple, Union
 import time
 import numpy as np
 import torch
@@ -7,9 +7,11 @@ from termcolor import colored as clr
 from shutil import copyfile
 from liftoff.config import namespace_to_dict
 import subprocess
+from argparse import Namespace
 
 from my_types import Args
 from .utils import get_ip, redirect_std, repair_std, get_utc_time
+
 
 Accuracy = float
 Loss = float
@@ -19,6 +21,8 @@ REMOTE_HOST = "tempuser@141.85.232.73"
 SERVER_eFOLDER = "/home/tempuser/workspace/andrei/lifelong_tmp_data/"
 SERVER_PYTHON = "/home/tempuser/anaconda3/envs/andreiENV/bin/python"
 SERVER_SCRIPT = "/home/tempuser/workspace/andrei/lifelong-learning/utils/upload_to_elasticsearch.py"
+
+BIG_DATA_KEYS = ["_train_trace", "_eval_trace", "_task_train_tick"]
 
 EvalResult = NamedTuple(
     "EvalResult",
@@ -540,7 +544,9 @@ class Reporting(object):
             save_data["_end_time"] = get_utc_time()
         torch.save(save_data, self._save_path)
         if final:
-            self.experiment_finished(save_data)
+            self.experiment_finished(save_data, ignore_keys=self.big_data,
+                                     local_efolder=self.local_efolder,
+                                     push_to_server=self.push_to_server)
 
     @staticmethod
     def _show_task_result(idx: int, task_name: str, acc: float, loss: float,
@@ -560,40 +566,42 @@ class Reporting(object):
 
         print(msg)
 
-    def experiment_finished(self, save_data: Dict):
+    @staticmethod
+    def experiment_finished(save_data: Union[Dict, str], ignore_keys: List[str] = BIG_DATA_KEYS,
+                            local_efolder: str = "results/tmp_efolder_data",
+                            push_to_server: bool = True):
+
+        save_data_path = None
+        if isinstance(save_data, str):
+            print(f"Load from disk results pkl. ({save_data})")
+            save_data_path = save_data
+            save_data = torch.load(save_data_path)
 
         save_data = save_data.copy()
 
-        for k in self.big_data:
+        for k in ignore_keys:
             save_data.pop(k, None)
 
-        # Bad for elasticsearch
-        save_data["_args"]["model"]["_conv"] = str(save_data["_args"]["model"]["_conv"])
-        start_time = save_data["_start_timestamp"]
+        data = Reporting.fix_older_data(save_data)
 
-        data = dict({})
-        for k, v in save_data.items():
-            while k[0] == "_":
-                k = k[1:]
-            data[k] = v
+        start_time = data["start_timestamp"]
 
         # Move data to local temporary folder
         basename = str(start_time).replace(".", "_") + "_"
         filename = basename + "edata.pkl"
-        data_filepath = os.path.join(self.local_efolder, filename)
+        data_filepath = os.path.join(local_efolder, filename)
         torch.save(data, data_filepath)
 
         print(f"eData data moved to {data_filepath}")
 
-        if self.push_to_server:
-            import sys
+        if push_to_server:
             import pickle
             import subprocess
             from utils.pid_wait import wait_pid
             import shutil
 
             # -- Redirect all std out & errors to tmp_edata file
-            out_filepath = os.path.join(self.local_efolder, basename + "_std_out_err.txt")
+            out_filepath = os.path.join(local_efolder, basename + "_std_out_err.txt")
 
             fsock, old_stdout, old_stderr = redirect_std(out_filepath)
 
@@ -607,9 +615,9 @@ class Reporting(object):
                                      stdout=fsock, stderr=fsock)
                 sts = wait_pid(p.pid, timeout=120)
                 if sts == 0:
-                    print(f"[eData] Success in moving eData to server. (RESPONSE: {sts}")
+                    print(f"[eData] Success in moving eData to server. (RESPONSE: {sts})")
                 else:
-                    print(f"[eData] ERROR in moving eData to server: RESPONSE: {sts}")
+                    print(f"[eData] ERROR in moving eData to server. (RESPONSE: {sts})")
 
                     repair_std(out_filepath, fsock, old_stdout, old_stderr)
 
@@ -673,4 +681,38 @@ class Reporting(object):
 
             print(f"SERVER_SCRIP Response {sts}")
 
+            print(f"Seems ok: {save_data_path}")
         return 0
+
+    @staticmethod
+    def fix_older_data(data: Dict):
+        import datetime
+        # -- Fix older data
+        # Bad for elasticsearch
+        if isinstance(data["_args"], Namespace):
+            data["_args"] = namespace_to_dict(data["_args"])
+            data["_args"]["model"]["_conv"] = str(data["_args"]["model"]["_conv"])
+
+        if "_start_timestamp" not in data:
+            data["_start_timestamp"] = data["_start_time"]
+
+        if isinstance(data["_start_time"], float):
+            data["_start_time"] = datetime.datetime.utcfromtimestamp(data["_start_time"])
+
+        new_data = dict({})
+        for k, v in data.items():
+            while k[0] == "_":
+                k = k[1:]
+            new_data[k] = v
+
+        return new_data
+
+
+if __name__ == "__main__":
+    import sys
+    import os
+
+    cwd = os.getcwd()
+    print(cwd)
+
+    Reporting.experiment_finished(sys.argv[1:])

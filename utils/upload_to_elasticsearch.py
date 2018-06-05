@@ -16,6 +16,7 @@ CHANGE = {
     " Infinity": " 999999999",
     " -Infinity": " -999999999",
 }
+NON_SERIALIZABLE_KEYS = ["start_time", "end_time"]
 
 
 def init_elastic_client():
@@ -47,10 +48,13 @@ def upload_to_elastic(file_paths: List[str]):
 
         # -- Remove non_mapping data such as (NaN inf)
         # Horrible hack
-        non_serializable_k = ["start_time", "end_time"]
-        non_serializable = dict({k: data[k] for k in non_serializable_k})
+        non_serializable = dict()
+        for k in NON_SERIALIZABLE_KEYS:
+            if k in data:
+                non_serializable[k] = data[k]
+
         serializable = data.copy()
-        for k in non_serializable_k:
+        for k in NON_SERIALIZABLE_KEYS:
             serializable.pop(k, None)
 
         s = json.dumps(serializable)
