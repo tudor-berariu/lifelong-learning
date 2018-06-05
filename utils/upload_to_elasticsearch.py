@@ -62,7 +62,7 @@ def upload_to_elastic(file_paths: List[str]):
         data.update(serializable)
 
         try:
-            res = es.index(index='sa',  doc_type='lifelong', body=data)
+            res = es.index(index='phd',  doc_type='lifelong', body=data)
         except Exception as e:
             print(clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
             print(clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
