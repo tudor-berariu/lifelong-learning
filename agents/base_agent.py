@@ -13,7 +13,7 @@ from tabulate import tabulate
 from my_types import Args
 from multi_task import MultiTask, TaskDataLoader, Batch
 from utils.reporting import Reporting
-from utils.utils import AverageMeter, accuracy
+from utils.util import AverageMeter, accuracy
 
 
 class EmptyScheduler:
