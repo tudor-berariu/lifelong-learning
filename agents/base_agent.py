@@ -32,6 +32,7 @@ class BaseAgent(object):
 
         self._args = args
         self.epochs_per_task = args.train.epochs_per_task
+        self.max_nan_losses = args.train.max_nan_loss
         self.multitask = multitask
         self.device = torch.device(args.device)
 
@@ -74,6 +75,10 @@ class BaseAgent(object):
         self.crt_data_loaders: Iterator[Tuple[TaskDataLoader, TaskDataLoader]] = None
         self.crt_task_name: str = None
         self.crt_eval_epoch: int = 0
+        self.crt_nan_losses = 0
+
+        self.stop_training = False
+        self.stop_training_info = dict()
 
         self._batch_aux_losses = {}
 
@@ -159,6 +164,9 @@ class BaseAgent(object):
                 if crt_epoch % self.save_report_freq == 0:
                     report.save()
 
+                if self.stop_training:
+                    break
+
                 self.all_epochs += 1
 
             self._end_train_task()
@@ -166,6 +174,9 @@ class BaseAgent(object):
             report.save()
 
             report.finished_training_task(train_task_idx+1, self.seen)
+
+            if self.stop_training:
+                break
 
         self._end_experiment()  # TEMPLATE
 
@@ -207,7 +218,10 @@ class BaseAgent(object):
             if batch_idx > max_batch:
                 break
 
+            self._start_train_task_batch()
             outputs, loss, info_batch = self._train_task_batch(batch_idx, data, targets, head_idx)
+            self._end_train_task_batch(outputs, loss, info_batch)
+
             info.update(info_batch)
             self.batch_update_auxiliary_losses(info_batch)
 
@@ -230,6 +244,9 @@ class BaseAgent(object):
                               f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
                               f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
                         self.batch_print_aux_losses()
+
+            if self.stop_training:
+                break
 
         self._end_train_epoch()
 
@@ -336,3 +353,19 @@ class BaseAgent(object):
 
     def _end_eval_task(self):
         pass
+
+    def _start_train_task_batch(self):
+        pass
+
+    def _end_train_task_batch(self, outputs: Tuple[List[Tensor]], loss: Tensor, info: Dict):
+        self._register_train_task_batch_loss(loss, info)
+
+    def _register_train_task_batch_loss(self, loss: Tensor, info: Dict):
+        if torch.isnan(loss):
+            self.crt_nan_losses += 1
+            if self.crt_nan_losses > self.max_nan_losses:
+                self.stop_training = True
+                self.stop_training_info["max_nan_loss_reached"] = self.crt_nan_losses
+                info.update({"stop_training_info": self.stop_training_info})
+        else:
+            self.crt_nan_losses = 0
