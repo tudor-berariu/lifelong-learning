@@ -1,3 +1,4 @@
+#!/bin/bash
 
 for file in $1*.pkl; do
     name=${file##*/}
