@@ -108,6 +108,8 @@ class Reporting(object):
         self.use_comet = args.reporting.plot_comet
         self.save_report_trace = args.reporting.save_report_trace
         self.min_save = min_save = args.reporting.min_save
+
+        self.generate_edata = args.reporting.generate_edata
         self.push_to_server = args.reporting.push_to_server
 
         # Register model summary
@@ -547,7 +549,8 @@ class Reporting(object):
             self.experiment_finished(save_data, ignore_keys=self.big_data,
                                      local_efolder=self.local_efolder,
                                      push_to_server=self.push_to_server,
-                                     file_path=self._save_path)
+                                     file_path=self._save_path,
+                                     generate_edata=self.generate_edata)
 
     @staticmethod
     def _show_task_result(idx: int, task_name: str, acc: float, loss: float,
@@ -571,7 +574,12 @@ class Reporting(object):
     def experiment_finished(save_data: Union[Dict, str], ignore_keys: List[str] = BIG_DATA_KEYS,
                             local_efolder: str = "results/tmp_efolder_data",
                             push_to_server: bool = True, mark_file_sent: bool = True,
-                            file_path: str = None, force_reupload: bool = False):
+                            file_path: str = None, force_reupload: bool = False,
+                            generate_edata: bool = True):
+
+        if not generate_edata:
+            print("Do not generate eData")
+            return 333
 
         save_data_path = None
         if isinstance(save_data, str):
