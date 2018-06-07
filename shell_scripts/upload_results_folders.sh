@@ -9,7 +9,7 @@ OUTFILE="$RES_FOLDER/$(date +%s)_server_upload.out"
 OUTFILE2=$OUTFILE
 
 find $RES_FOLDER -type d -name '[0-9]*_*' -exec rsync --ignore-times --checksum --progress  \
-    -avr {}  tempuser@141.85.232.73:/home/tempuser/workspace/andrei/lifelong-learning/results \; \
+    -avr {}  tempuser@141.85.232.73:/home/tempuser/workspace/andrei/lifelong_learning_results \; \
     | tee $OUTFILE2;
 
 echo ""
