@@ -69,3 +69,4 @@ reporting:
   comet_plot_freq_factor: 0.1
 
   push_to_server: yes
+  generate_edata: yes
