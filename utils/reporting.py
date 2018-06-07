@@ -583,6 +583,11 @@ class Reporting(object):
         if isinstance(save_data, str):
             print(f"Load from disk results pkl. ({save_data})")
             save_data_path = save_data
+
+            if os.path.getsize(save_data_path) <= 0:
+                print(f"[ERROR] File empty: {save_data_path}")
+                return 334
+
             save_data = torch.load(save_data_path)
             if file_path is None:
                 file_path = save_data_path

@@ -64,6 +64,10 @@ def upload_eData_to_elastic(file_paths: List[str], force_update: bool = False):
         first_data = True
 
     for file_path in file_paths:
+        if os.path.getsize(file_path) <= 0:
+            print(f"[ERROR] File empty: {file_path}")
+            continue
+
         data: Dict = torch.load(file_path)
         data = fix_data(data)
 
@@ -181,4 +185,5 @@ if __name__ == "__main__":
                                       push_to_server=args.push_to_server)
 
     print("=" * 79)
+    print()
 

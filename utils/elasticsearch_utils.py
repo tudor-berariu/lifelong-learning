@@ -91,6 +91,7 @@ def get_data_to_pandas():
 
         scroll = res['_scroll_id']
         res = es.scroll(scroll_id=scroll, scroll='1m')
+
     df = pd.DataFrame(all_hits)
     df.to_csv("test.csv")
     return df
