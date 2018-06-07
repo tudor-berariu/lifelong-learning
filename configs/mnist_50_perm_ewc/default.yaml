@@ -40,6 +40,7 @@ train:
   batch_size: 1000
   shuffle: True
   epochs_per_task: 20
+  max_nan_loss: 5
   stop_if_not_better: 5
   test_batch_size: 0
   _optimizer:
@@ -65,3 +66,4 @@ reporting:
   comet_plot_freq_factor: 0.1
 
   push_to_server: no
+  generate_edata: no

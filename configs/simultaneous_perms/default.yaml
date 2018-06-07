@@ -26,6 +26,7 @@ train:
   shuffle: True
   epochs_per_task: 50
   stop_if_not_better: 5
+  max_nan_loss: 5
   test_batch_size: 0
   _optimizer:
     name: Adam
@@ -51,3 +52,6 @@ reporting:
   tensorboard_auto_start: no
   plot_comet: no
   comet_plot_freq_factor: 0.1
+
+  push_to_server: no
+  generate_edata: no

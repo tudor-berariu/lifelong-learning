@@ -25,6 +25,7 @@ train:
   batch_size: 1024
   shuffle: True
   epochs_per_task: 100
+  max_nan_loss: 5
   stop_if_not_better: 5
   test_batch_size: 0
   _optimizer:
@@ -51,3 +52,6 @@ reporting:
   tensorboard_auto_start: no
   plot_comet: no
   comet_plot_freq_factor: 0.1
+
+  push_to_server: no
+  generate_edata: no
