@@ -626,7 +626,7 @@ class Reporting(object):
 
             # -- Try to move eData file to server
             server_path = SERVER_eFOLDER + filename
-            if local_ip != REMOTE_HOST:
+            if local_ip != REMOTE_IP:
                 p = subprocess.Popen(["scp", data_filepath, f"{REMOTE_HOST}:{server_path}"],
                                      stdout=fsock, stderr=fsock)
                 sts = wait_pid(p.pid, timeout=120)
@@ -659,7 +659,7 @@ class Reporting(object):
                 return fsize
 
             remote_cmd = ""
-            if local_ip != REMOTE_HOST:
+            if local_ip != REMOTE_IP:
                 remote_cmd = f"ssh {REMOTE_HOST} "
 
             # Get local size
