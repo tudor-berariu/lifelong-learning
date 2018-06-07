@@ -31,8 +31,6 @@ EvalResult = NamedTuple(
      ("global_avg", Dict[str, float])]
 )
 
-
-
 class TensorboardSummary(object):
 
     def __init__(self, experiment_name: str, path_to_save: str, auto_start_board: bool):
@@ -575,7 +573,7 @@ class Reporting(object):
                             local_efolder: str = "results/tmp_efolder_data",
                             push_to_server: bool = True, mark_file_sent: bool = True,
                             file_path: str = None, force_reupload: bool = False,
-                            generate_edata: bool = True):
+                            generate_edata: bool = True, force_update: bool = False):
 
         if not generate_edata:
             print("Do not generate eData")

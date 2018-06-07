@@ -1,13 +1,5 @@
-import sys
-from typing import List, Dict
 from elasticsearch import Elasticsearch
-import torch
-from termcolor import colored as clr
-import traceback
-import shutil
 import os
-import json
-import re
 import pandas as pd
 
 pd.set_option('display.max_rows', 500)
