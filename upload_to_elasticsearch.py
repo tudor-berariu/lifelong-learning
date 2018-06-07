@@ -150,7 +150,7 @@ if __name__ == "__main__":
             else:
                 edata_file_paths.append(os.path.abspath(path))
         else:
-            results_files = glob.glob(f"{path}/**/reporting.pkl")
+            results_files = glob.glob(f"{path}/**/reporting.pkl", recursive=True)
             results_files = [os.path.abspath(x) for x in results_files]
             results_file_paths.extend(results_files)
 
