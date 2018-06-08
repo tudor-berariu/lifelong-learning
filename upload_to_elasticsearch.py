@@ -91,7 +91,8 @@ def upload_eData_to_elastic(file_paths: List[str], force_update: bool = False):
 
             if not force_update and found_items > 0:
                 print(f"[ERROR] Already found item in database (by timestamp): {file_path}")
-                if res["args.title"] != data["args"]["title"]:
+                title = res["hits"]["hits"][0]["_source"]["args"]["title"]
+                if title != data["args"]["title"]:
                     print(f".... But not by name?!?!: {file_path}")
                 else:
                     print(f"[ERROR] SKIP Duplicate")

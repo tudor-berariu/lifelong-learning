@@ -53,7 +53,7 @@ def search_by_timestamp(start_timestamp, es=None):
         "query": {
             "match": {
                 "start_timestamp": {
-                    "query": start_timestamp,
+                    "query": 1527841600.9413269,
                 }
             }
         }
@@ -66,8 +66,7 @@ def search_by_timestamp(start_timestamp, es=None):
     return res, len(res["hits"]["hits"])
 
 
-def get_data_to_pandas():
-    """Get all data in database to pandas dataframe"""
+def get_all_hits():
     es = init_elastic_client()
 
     doc = {
@@ -86,14 +85,19 @@ def get_data_to_pandas():
         for hit in hits:
             source = hit.pop("_source")
             hit.update(source)
-            hit = flatten_dict(hit)
             all_hits.append(hit)
 
         scroll = res['_scroll_id']
         res = es.scroll(scroll_id=scroll, scroll='1m')
+    return all_hits
+
+
+def get_data_as_dataframe():
+    """Get all data in database to pandas dataframe"""
+    all_hits = get_all_hits()
 
     df = pd.DataFrame(all_hits)
-    df.to_csv("test.csv")
+    # df.to_csv("test.csv")
     return df
 
 
