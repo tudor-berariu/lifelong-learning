@@ -7,7 +7,7 @@ from termcolor import colored as clr
 # Project imports
 from my_types import Args
 from multi_task import MultiTask
-from utils import standard_train, standard_validate
+from utils.util import standard_train, standard_validate
 from utils.reporting import Reporting
 
 
