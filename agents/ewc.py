@@ -44,7 +44,7 @@ class EWC(BaseAgent):
         if task_no > 0:
             for _idx, constraint in enumerate(self.constraints):
                 for name, param in model.named_parameters():
-                    if param.requires_grad:
+                    if param.grad is not None and name in constraint.elasticity:
                         loss_name = "loss_" + name
                         layer_loss = torch.dot(constraint.elasticity[name],
                                                (constraint.mode[name] - param.view(-1)).pow(2))
@@ -86,7 +86,7 @@ class EWC(BaseAgent):
             elasticity = dict({})
 
         for name, param in model.named_parameters():
-            if param.requires_grad:
+            if param.grad is not None:
                 crt_mode[name] = param.detach().clone().view(-1)
                 grad[name] = param.grad.detach().pow(2).clone().view(-1)
                 if name in elasticity:

@@ -56,3 +56,6 @@ reporting:
   tensorboard_auto_start: yes
   plot_comet: no
   comet_plot_freq_factor: 0.1
+
+  push_to_server: yes
+  generate_edata: yes

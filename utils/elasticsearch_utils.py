@@ -1,13 +1,5 @@
-import sys
-from typing import List, Dict
 from elasticsearch import Elasticsearch
-import torch
-from termcolor import colored as clr
-import traceback
-import shutil
 import os
-import json
-import re
 import pandas as pd
 
 pd.set_option('display.max_rows', 500)
@@ -99,6 +91,7 @@ def get_data_to_pandas():
 
         scroll = res['_scroll_id']
         res = es.scroll(scroll_id=scroll, scroll='1m')
+
     df = pd.DataFrame(all_hits)
     df.to_csv("test.csv")
     return df

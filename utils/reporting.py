@@ -31,8 +31,6 @@ EvalResult = NamedTuple(
      ("global_avg", Dict[str, float])]
 )
 
-
-
 class TensorboardSummary(object):
 
     def __init__(self, experiment_name: str, path_to_save: str, auto_start_board: bool):
@@ -108,6 +106,8 @@ class Reporting(object):
         self.use_comet = args.reporting.plot_comet
         self.save_report_trace = args.reporting.save_report_trace
         self.min_save = min_save = args.reporting.min_save
+
+        self.generate_edata = args.reporting.generate_edata
         self.push_to_server = args.reporting.push_to_server
 
         # Register model summary
@@ -547,7 +547,8 @@ class Reporting(object):
             self.experiment_finished(save_data, ignore_keys=self.big_data,
                                      local_efolder=self.local_efolder,
                                      push_to_server=self.push_to_server,
-                                     file_path=self._save_path)
+                                     file_path=self._save_path,
+                                     generate_edata=self.generate_edata)
 
     @staticmethod
     def _show_task_result(idx: int, task_name: str, acc: float, loss: float,
@@ -571,12 +572,22 @@ class Reporting(object):
     def experiment_finished(save_data: Union[Dict, str], ignore_keys: List[str] = BIG_DATA_KEYS,
                             local_efolder: str = "results/tmp_efolder_data",
                             push_to_server: bool = True, mark_file_sent: bool = True,
-                            file_path: str = None, force_reupload: bool = False):
+                            file_path: str = None, force_reupload: bool = False,
+                            generate_edata: bool = True, force_update: bool = False):
+
+        if not generate_edata:
+            print("Do not generate eData")
+            return 333
 
         save_data_path = None
         if isinstance(save_data, str):
             print(f"Load from disk results pkl. ({save_data})")
             save_data_path = save_data
+
+            if os.path.getsize(save_data_path) <= 0:
+                print(f"[ERROR] File empty: {save_data_path}")
+                return 334
+
             save_data = torch.load(save_data_path)
             if file_path is None:
                 file_path = save_data_path
@@ -620,7 +631,7 @@ class Reporting(object):
 
             # -- Try to move eData file to server
             server_path = SERVER_eFOLDER + filename
-            if local_ip != REMOTE_HOST:
+            if local_ip != REMOTE_IP:
                 p = subprocess.Popen(["scp", data_filepath, f"{REMOTE_HOST}:{server_path}"],
                                      stdout=fsock, stderr=fsock)
                 sts = wait_pid(p.pid, timeout=120)
@@ -653,7 +664,7 @@ class Reporting(object):
                 return fsize
 
             remote_cmd = ""
-            if local_ip != REMOTE_HOST:
+            if local_ip != REMOTE_IP:
                 remote_cmd = f"ssh {REMOTE_HOST} "
 
             # Get local size

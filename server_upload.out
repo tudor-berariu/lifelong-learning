@@ -1,43 +1,0 @@
-sending incremental file list
-1528226659_default/
-1528226659_default/.__end
-             11 100%    0.00kB/s    0:00:00               11 100%    0.00kB/s    0:00:00 (xfr#1, to-chk=8/10)
-1528226659_default/.__leaf
-              0 100%    0.00kB/s    0:00:00 (xfr#2, to-chk=7/10)
-1528226659_default/.__mode
-              7 100%    6.84kB/s    0:00:00                7 100%    6.84kB/s    0:00:00 (xfr#3, to-chk=6/10)
-1528226659_default/.__ppid
-              5 100%    4.88kB/s    0:00:00                5 100%    4.88kB/s    0:00:00 (xfr#4, to-chk=5/10)
-1528226659_default/.__start
-             11 100%   10.74kB/s    0:00:00               11 100%   10.74kB/s    0:00:00 (xfr#5, to-chk=4/10)
-1528226659_default/.__timestamp
-             11 100%   10.74kB/s    0:00:00               11 100%   10.74kB/s    0:00:00 (xfr#6, to-chk=3/10)
-1528226659_default/.reporting.pkl_uploaded
-             29 100%   28.32kB/s    0:00:00               29 100%   28.32kB/s    0:00:00 (xfr#7, to-chk=2/10)
-1528226659_default/cfg.yaml
-          1,325 100%    1.26MB/s    0:00:00            1,325 100%    1.26MB/s    0:00:00 (xfr#8, to-chk=1/10)
-1528226659_default/reporting.pkl
-          9,183 100%    8.76MB/s    0:00:00            9,183 100%    8.76MB/s    0:00:00 (xfr#9, to-chk=0/10)
-
-sent 11,396 bytes  received 191 bytes  23,174.00 bytes/sec
-total size is 10,582  speedup is 0.91
-sending incremental file list
-
-sent 420 bytes  received 17 bytes  291.33 bytes/sec
-total size is 10,603  speedup is 24.26
-sending incremental file list
-
-sent 431 bytes  received 17 bytes  896.00 bytes/sec
-total size is 10,695  speedup is 23.87
-sending incremental file list
-
-sent 432 bytes  received 17 bytes  299.33 bytes/sec
-total size is 10,697  speedup is 23.82
-sending incremental file list
-
-sent 424 bytes  received 17 bytes  294.00 bytes/sec
-total size is 10,583  speedup is 24.00
-sending incremental file list
-
-sent 433 bytes  received 17 bytes  900.00 bytes/sec
-total size is 10,613  speedup is 23.58
