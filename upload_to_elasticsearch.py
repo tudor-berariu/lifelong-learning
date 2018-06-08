@@ -87,11 +87,15 @@ def upload_eData_to_elastic(file_paths: List[str], force_update: bool = False):
         data = fix_data(data)
 
         if not first_data:
-            _, found_items = search_by_timestamp(data["start_timestamp"])
+            res, found_items = search_by_timestamp(data["start_timestamp"])
 
             if not force_update and found_items > 0:
-                print(f"[ERROR] Already found item in database: {file_path}")
-                continue
+                print(f"[ERROR] Already found item in database (by timestamp): {file_path}")
+                if res["args.title"] != data["args"]["title"]:
+                    print(f".... But not by name?!?!: {file_path}")
+                else:
+                    print(f"[ERROR] SKIP Duplicate")
+                    continue
 
         out_filepath = file_path + "_out"
         fsock, old_stdout, old_stderr = redirect_std(out_filepath)
