@@ -8,8 +8,8 @@ tasks:
   in_size: [3, 32, 32]
   reset_targets: False
   validation: 0
-  split: False
-  perms_no: 0
+  split: 1
+  perms_no: 1
   permute_targets: no
   common_head: yes
 
@@ -26,6 +26,7 @@ train:
   shuffle: True
   epochs_per_task: 100
   stop_if_not_better: 5
+  max_nan_loss: 5
   test_batch_size: 0
   _optimizer:
     name: Adam
