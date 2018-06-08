@@ -53,6 +53,21 @@ def fix_data(data: Dict):
     data["args"]["tasks"]["no_datasets"] = len(data["args"]["tasks"]["datasets"])
     data["args"]["tasks"]["no_tasks"] = len(data["task_info"])
 
+    # Transform long dict to list
+    best_eval = []
+    last_eval = []
+    for ix, v in sorted(data["best_eval"].items()):
+        v["idx"] = ix
+        best_eval.append(v)
+    data["best_eval"] = best_eval
+    for ix, v in sorted(data["last_eval"].items()):
+        v["idx"] = ix
+        last_eval.append(v)
+    data["last_eval"] = last_eval
+
+    data["best_eval_acc"] = [x["acc"]["value"] for x in best_eval]
+    data["last_eval_acc"] = [x["acc"] for x in last_eval]
+
     return data
 
 
