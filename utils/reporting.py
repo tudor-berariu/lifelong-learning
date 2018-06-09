@@ -168,7 +168,6 @@ class Reporting(object):
         self._last_train = deepcopy(self._last_eval)
 
         self._task_train_tick: List[Dict] = []
-        self._last_eval_data: Dict = dict()
         self._eval_metrics: Dict = dict({
             "score_new_raw": [],
             "score_base_raw": [],
@@ -183,7 +182,7 @@ class Reporting(object):
         self.big_data = ["_train_trace", "_eval_trace", "_task_train_tick"]
         self._save_variables = ["_start_time", "_start_timestamp", "_args",
                                 "_best_eval", "_last_eval", "_task_info",
-                                "_eval_metrics", "_model_summary", "_last_eval_data"]
+                                "_eval_metrics", "_model_summary"]
         if self.save_report_trace:
             self._save_variables.extend(self.big_data)
 
