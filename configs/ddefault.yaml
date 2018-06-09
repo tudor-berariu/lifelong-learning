@@ -42,6 +42,7 @@ train:
   epochs_per_task: 5
   max_nan_loss: 5
   stop_if_not_better: 5
+  early_stop: 10
   test_batch_size: 0
   _optimizer:
     name: Adam

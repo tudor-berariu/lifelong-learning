@@ -8,6 +8,7 @@ from typing import Union, Callable, Any, List, Dict, Iterator, Tuple, Type
 import os
 import numpy as np
 from tabulate import tabulate
+from liftoff.config import value_of
 
 # Project imports
 from my_types import Args
@@ -33,6 +34,7 @@ class BaseAgent(object):
         self._args = args
         self.epochs_per_task = args.train.epochs_per_task
         self.max_nan_losses = args.train.max_nan_loss
+        self.early_stop = value_of(args.train, "early_stop", np.inf)
         self.multitask = multitask
         self.device = torch.device(args.device)
 
@@ -116,6 +118,9 @@ class BaseAgent(object):
 
         # Loop over tasks
         for self.crt_task_idx, self.crt_data_loaders in enumerate(self.train_tasks):
+            early_stop_task = False
+            eval_no_improvement = 0
+
             train_task_idx, data_loaders = self.crt_task_idx, self.crt_data_loaders
 
             train_loader, val_loader = data_loaders
@@ -145,6 +150,7 @@ class BaseAgent(object):
 
                     # Validate on first 'how_many' tasks
                     how_many = self.no_tasks if self.eval_not_trained else train_task_idx + 1
+                    new_best_acc_cnt = new_best_loss_cnt = 0
                     for val_task_idx, val_loader in enumerate(multitask.test_tasks(how_many)):
                         val_loss, val_acc, info = self._eval_task(val_task_idx, val_loader,
                                                                   crt_epoch, eval_epoch)
@@ -156,6 +162,17 @@ class BaseAgent(object):
                         new_best_acc, new_best_loss = report.trace_eval(self.seen, val_task_idx,
                                                                         crt_epoch, eval_epoch,
                                                                         val_info)
+                        new_best_acc_cnt += new_best_acc
+                        new_best_loss_cnt += new_best_loss
+
+                        # Early task stop
+                        if val_task_idx == train_task_idx:
+                            if new_best_acc + new_best_loss > 0:
+                                eval_no_improvement = 0
+                            else:
+                                eval_no_improvement += 1
+                                if eval_no_improvement > self.early_stop:
+                                    early_stop_task = True
 
                     self.crt_eval_epoch += 1
                     self.all_eval_epochs += 1
@@ -164,7 +181,9 @@ class BaseAgent(object):
                 if crt_epoch % self.save_report_freq == 0:
                     report.save()
 
-                if self.stop_training:
+                if self.stop_training or early_stop_task:
+                    print(f"[TRAIN] Early stop task. stop_training: {self.stop_training}"
+                          f" early_stop_task: {early_stop_task}")
                     break
 
                 self.all_epochs += 1
