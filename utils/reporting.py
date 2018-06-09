@@ -279,10 +279,6 @@ class Reporting(object):
             if plot_t:
                 plot_t.tick([(task_name, {f"loss_train": loss, "acc_train": acc}, train_epoch)])
 
-        print("trace train")
-        print([v["acc"]["value"] for v in self._best_train.values()])
-        print([v["acc"] for v in self._last_train.values()])
-
     def trace_train_batch(self, seen_training: int, task_idx: int, train_epoch: int, info: dict):
         pass
 
@@ -342,9 +338,6 @@ class Reporting(object):
 
             self._show_task_result(train_epoch, task_name, acc, loss,
                                    new_best_acc, new_best_loss, crt_training)
-        print("trace eval")
-        print([v["acc"]["value"] for v in self._best_eval.values()])
-        print([v["acc"] for v in self._last_eval.values()])
 
         return new_best_acc, new_best_loss
 
