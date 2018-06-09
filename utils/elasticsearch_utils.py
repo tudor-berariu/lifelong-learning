@@ -53,7 +53,7 @@ def search_by_timestamp(start_timestamp, es=None):
         "query": {
             "match": {
                 "start_timestamp": {
-                    "query": 1527841600.9413269,
+                    "query": start_timestamp,
                 }
             }
         }
@@ -95,8 +95,9 @@ def get_all_hits():
 def get_data_as_dataframe():
     """Get all data in database to pandas dataframe"""
     all_hits = get_all_hits()
+    flat_data = [flatten_dict(x) for x in all_hits]
+    df = pd.DataFrame(flat_data)
 
-    df = pd.DataFrame(all_hits)
     # df.to_csv("test.csv")
     return df
 
