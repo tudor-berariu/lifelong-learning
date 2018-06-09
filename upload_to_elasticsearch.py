@@ -14,6 +14,7 @@ import os
 import json
 import re
 import glob
+import numpy as np
 
 from utils.elasticsearch_utils import init_elastic_client, search_by_timestamp
 from utils.util import repair_std, redirect_std
@@ -68,6 +69,18 @@ def fix_data(data: Dict):
     data["best_eval_acc"] = [x["acc"]["value"] for x in best_eval]
     data["last_eval_acc"] = [x["acc"] for x in last_eval]
 
+    # Extra columns ->
+    task_info = data["args"]["tasks"]
+    task_name = f'{task_info["datasets"]}'
+    task_name += f'_i{np.prod(task_info["in_size"])}'
+    task_name += f'_rt{int(task_info["reset_targets"])}'
+    task_name += f'_v{task_info["validation"]}'
+    task_name += f'_s{task_info["split"]}'
+    task_name += f'_p{task_info["perms_no"]}'
+    task_name += f'_pt{int(task_info["permute_targets"])}'
+    task_name += f'_c{int(task_info["common_head"])}'
+
+    data["task_name"] = task_name
     return data
 
 
