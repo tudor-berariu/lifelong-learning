@@ -2,12 +2,13 @@ from typing import Dict, List, NamedTuple, Tuple, Union
 import time
 import numpy as np
 import torch
-import os
 from termcolor import colored as clr
 from shutil import copyfile
 from liftoff.config import namespace_to_dict
 import subprocess
 from argparse import Namespace
+from copy import deepcopy
+import os
 
 from my_types import Args
 from utils.util import get_ip, redirect_std, repair_std, get_utc_time
@@ -30,6 +31,7 @@ EvalResult = NamedTuple(
      ("dataset_avg", Dict[str, Dict[str, float]]),
      ("global_avg", Dict[str, float])]
 )
+
 
 class TensorboardSummary(object):
 
@@ -162,8 +164,8 @@ class Reporting(object):
         self._last_eval = dict({task_idx: {"acc": -1, "seen": -1, "loss":  np.inf}
                                 for task_idx in task_idx_to_name.keys()})
 
-        self._best_train = self._best_eval.copy()
-        self._last_train = self._last_eval.copy()
+        self._best_train = deepcopy(self._best_eval)
+        self._last_train = deepcopy(self._last_eval)
 
         self._task_train_tick: List[Dict] = []
         self._last_eval_data: Dict = dict()
@@ -237,7 +239,7 @@ class Reporting(object):
         return plot_c
 
     def trace_train(self, seen_training: int, task_idx: int, train_epoch: int, info: dict):
-        info = info.copy()
+        info = deepcopy(info)
 
         trace = self._train_trace
         self._max_seen_train = seen_training
@@ -278,12 +280,16 @@ class Reporting(object):
             if plot_t:
                 plot_t.tick([(task_name, {f"loss_train": loss, "acc_train": acc}, train_epoch)])
 
+        print("trace train")
+        print([v["acc"]["value"] for v in self._best_train.values()])
+        print([v["acc"] for v in self._last_train.values()])
+
     def trace_train_batch(self, seen_training: int, task_idx: int, train_epoch: int, info: dict):
         pass
 
     def trace_eval(self, seen_training: int, task_idx: int, train_epoch: int, val_epoch: int,
                    info: dict) -> Tuple[bool, bool]:
-        info = info.copy()
+        info = deepcopy(info)
 
         self._has_evaluated = True
         trace = self._eval_trace
@@ -337,6 +343,9 @@ class Reporting(object):
 
             self._show_task_result(train_epoch, task_name, acc, loss,
                                    new_best_acc, new_best_loss, crt_training)
+        print("trace eval")
+        print([v["acc"]["value"] for v in self._best_eval.values()])
+        print([v["acc"] for v in self._last_eval.values()])
 
         return new_best_acc, new_best_loss
 
@@ -354,21 +363,22 @@ class Reporting(object):
 
         last[task_idx]["seen"] = seen_training
 
+        new_info = deepcopy(info)
         if best[task_idx]["acc"]["value"] < acc:
             best[task_idx]["acc"]["value"] = acc
             best[task_idx]["acc"]["seen"] = seen_training
-            best[task_idx]["acc"]["info"] = info.copy()
+            best[task_idx]["acc"]["info"] = new_info
             new_best_acc = True
 
         if best[task_idx]["loss"]["value"] > loss:
             best[task_idx]["loss"]["value"] = loss
             best[task_idx]["loss"]["seen"] = seen_training
-            best[task_idx]["loss"]["info"] = info.copy()
+            best[task_idx]["loss"]["info"] = new_info
             new_best_loss = True
 
         info["new_best_acc"], info["new_best_loss"] = new_best_acc, new_best_loss
-
-        last[task_idx].update(info.copy())
+        new_info = deepcopy(info)
+        last[task_idx].update(new_info)
         return new_best_acc, new_best_loss
 
     def finished_training_task(self, no_trained_tasks: int, seen: int) -> None:
@@ -598,7 +608,7 @@ class Reporting(object):
             print(f"SKIP UPLOAD. File already marked as uploaded. ({mark_uploaded_path})")
             return 4
 
-        save_data = save_data.copy()
+        save_data = deepcopy(save_data)
 
         for k in ignore_keys:
             save_data.pop(k, None)
