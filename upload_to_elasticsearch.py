@@ -114,7 +114,7 @@ def upload_eData_to_elastic(args):
         try:
             data = torch.load(file_path)
         except Exception as e:
-            print(f"[_{p_idx}_] [ERROR] Can't open {file_path} err: {e}")
+            print(f"[_{pidx}_] [ERROR] Can't open {file_path} err: {e}")
             continue
 
         data = fix_data(data)
