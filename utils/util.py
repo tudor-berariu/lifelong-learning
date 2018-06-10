@@ -166,3 +166,13 @@ def get_utc_time():
     import datetime
     import pytz
     return datetime.datetime.now(tz=pytz.utc)
+
+
+def split_first_argument(ml: List[str]):
+    # Parse first argument if it was given by <| xargs -0 -Ifoo>
+    first_elem = ml[0]
+    ml = ml[1:]
+    first_elem = first_elem.split("\n")
+    first_elem = [x for x in first_elem if len(x) > 0]
+    ml.extend(first_elem)
+    return ml

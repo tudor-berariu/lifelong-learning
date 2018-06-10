@@ -15,9 +15,11 @@ import json
 import re
 import glob
 import numpy as np
+import torch.multiprocessing as mp
+import itertools
 
 from utils.elasticsearch_utils import init_elastic_client, search_by_timestamp
-from utils.util import repair_std, redirect_std
+from utils.util import repair_std, redirect_std, split_first_argument
 from utils.reporting import Reporting, BIG_DATA_KEYS
 
 CHANGE = {
@@ -92,7 +94,12 @@ def fix_data(data: Dict):
     return data
 
 
-def upload_eData_to_elastic(file_paths: List[str], force_update: bool = False):
+def upload_eData_to_elastic(args):
+    pidx, file_paths, force_update = args
+
+    print(f"[_{pidx}_] Process eData")
+    print(f"[_{pidx}_] " + "=" * 79)
+
     es: Elasticsearch = init_elastic_client()
     indices = es.indices.get_alias("*")
     first_data = False
@@ -101,7 +108,7 @@ def upload_eData_to_elastic(file_paths: List[str], force_update: bool = False):
 
     for file_path in file_paths:
         if os.path.getsize(file_path) <= 0:
-            print(f"[ERROR] File empty: {file_path}")
+            print(f"[_{pidx}_] " + f"[ERROR] File empty: {file_path}")
             continue
 
         data: Dict = torch.load(file_path)
@@ -111,12 +118,13 @@ def upload_eData_to_elastic(file_paths: List[str], force_update: bool = False):
             res, found_items = search_by_timestamp(data["start_timestamp"])
 
             if not force_update and found_items > 0:
-                print(f"[ERROR] Already found item in database (by timestamp): {file_path}")
+                print(f"[_{pidx}_] " +
+                      f"[ERROR] Already found item in database (by timestamp): {file_path}")
                 title = res["hits"]["hits"][0]["_source"]["args"]["title"]
                 if title != data["args"]["title"]:
-                    print(f".... But not by name?!?!: {file_path}")
+                    print(f"[_{pidx}_] " + f".... But not by name?!?!: {file_path}")
                 else:
-                    print(f"[ERROR] SKIP Duplicate")
+                    print(f"[_{pidx}_] " + f"[ERROR] SKIP Duplicate")
                     continue
 
         out_filepath = file_path + "_out"
@@ -125,10 +133,10 @@ def upload_eData_to_elastic(file_paths: List[str], force_update: bool = False):
         try:
             res = es.index(index='phd',  doc_type='lifelong', body=data)
         except Exception as e:
-            print(clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
-            print(clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
-            print(clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
-            print("\nPLEASE do manual push :)")
+            print(f"[_{pidx}_] " + clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
+            print(f"[_{pidx}_] " + clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
+            print(f"[_{pidx}_] " + clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
+            print(f"[_{pidx}_] " + "\nPLEASE do manual push :)")
             exc_type, exc_value, exc_traceback = sys.exc_info()
             traceback.print_exception(exc_type, exc_value, exc_traceback,
                                       limit=100, file=sys.stdout)
@@ -139,7 +147,8 @@ def upload_eData_to_elastic(file_paths: List[str], force_update: bool = False):
             os.remove(file_path)
             os.remove(out_filepath)
 
-        print(f"INDEXED: {file_path}")
+        print(f"[_{pidx}_] " + f"INDEXED: {file_path}")
+    print(f"[_{pidx}_] " + "=" * 79)
 
 
 def analyze_mapper_exection():
@@ -157,7 +166,25 @@ def analyze_mapper_exection():
             tz=pytz.utc), "test": 3})
 
 
+def run_full_report_upload(args):
+    pidx, file, args = args
+    # Process reporting raw data
+    print(f"[_{pidx}_] " + "Process reporing.pkl")
+    print(f"[_{pidx}_] " + "=" * 79)
+
+    Reporting.experiment_finished(file, ignore_keys=args.ignore_keys,
+                                  local_efolder=args.local_efolder,
+                                  mark_file_sent=args.mark_file_sent,
+                                  force_reupload=args.force_reupload,
+                                  force_update=args.force_update,
+                                  push_to_server=args.push_to_server)
+    print(f"[_{pidx}_] " + "=" * 79)
+    print(f"[_{pidx}_] ")
+
+
 if __name__ == "__main__":
+    mp.set_start_method('spawn')
+
     parser = argparse.ArgumentParser(
         description='Upload data to Elasticserch server.\n'
                     '- All folders in list will be replaced by results.pkl file obtained '
@@ -182,8 +209,13 @@ if __name__ == "__main__":
     parser.add_argument("--push-to-server",
                         type=lambda s: s.lower() in ['true', 't', 'yes', '1'], default=True,
                         help=f'Push eData to server. )')
+    parser.add_argument("-p", "--procs", type=int, required=True, action="store",
+                        default=4, help=f'PROCS_NO')
 
     args = parser.parse_args()
+
+    # Parse first argument if it was given by <| xargs -0 -Ifoo>
+    args.paths = split_first_argument(args.paths)
 
     edata_file_paths = []
     results_file_paths = []
@@ -200,14 +232,12 @@ if __name__ == "__main__":
             results_file_paths.extend(results_files)
 
     # Process eData files first
-    print("Process eData")
-    print("=" * 79)
-    upload_eData_to_elastic(edata_file_paths, force_update=args.force_update)
-    print("=" * 79)
-
-    # Process reporting raw data
-    print("Process reporing.pkl")
-    print("=" * 79)
+    if len(edata_file_paths) > 0:
+        p = mp.Pool(args.procs)
+        p.map(upload_eData_to_elastic,
+              zip(range(len(edata_file_paths)),
+                  edata_file_paths,
+                  itertools.repeat(args.force_update)))
 
     if args.ignore_default:
         ignore_keys = []
@@ -216,15 +246,10 @@ if __name__ == "__main__":
 
     if args.ignore_keys is not None:
         ignore_keys.extend(args.ignore_keys)
+    args.ignore_keys = ignore_keys
 
-    for file in results_file_paths:
-        Reporting.experiment_finished(file, ignore_keys=ignore_keys,
-                                      local_efolder=args.local_efolder,
-                                      mark_file_sent=args.mark_file_sent,
-                                      force_reupload=args.force_reupload,
-                                      force_update=args.force_update,
-                                      push_to_server=args.push_to_server)
-
-    print("=" * 79)
-    print()
+    if len(results_file_paths) > 0:
+        p = mp.Pool(args.procs)
+        p.map(run_full_report_upload,
+              zip(range(len(results_file_paths)), results_file_paths, itertools.repeat(args)))
 
