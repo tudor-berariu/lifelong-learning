@@ -6,6 +6,8 @@ import datetime
 import torch.multiprocessing as mp
 import itertools
 from liftoff.config import namespace_to_dict
+import os
+import glob
 
 from utils.reporting import Reporting, EVAL_METRICS_BASE, get_base_score, EPISODIC_METRICS
 from utils.util import split_first_argument
@@ -196,6 +198,8 @@ if __name__ == "__main__":
 
     # Parse first argument if it was given by <| xargs -0 -Ifoo>
     args.paths = split_first_argument(args.paths)
+    if os.path.isdir(args.paths[0]):
+        args.paths = glob.glob(f"{path}/**/reporting.pkl", recursive=True)
 
     file_paths = args.paths
 
