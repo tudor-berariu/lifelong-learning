@@ -29,6 +29,20 @@ CHANGE = {
 NON_SERIALIZABLE_KEYS = ["start_time", "end_time"]
 
 
+def get_task_name(data):
+    task_info = data["args"]["tasks"]
+    task_name = f'#{"_".join(task_info["datasets"])}'
+    task_name += f'_i{np.prod(task_info["in_size"])}'
+    task_name += f'_rt{int(task_info["reset_targets"])}'
+    task_name += f'_v{task_info["validation"]}'
+    task_name += f'_s{max(task_info["split"], 1)}'
+    task_name += f'_p{max(task_info["perms_no"], 1)}'
+    task_name += f'_pt{int(task_info["permute_targets"])}'
+    task_name += f'_c{int(task_info["common_head"])}'
+
+    return task_name
+
+
 def fix_data(data: Dict):
     # -- Remove non_mapping data such as (NaN inf)
     # Horrible hack
@@ -48,6 +62,8 @@ def fix_data(data: Dict):
 
     data = non_serializable
     data.update(serializable)
+
+    # -- Add redundant info but useful
 
     # add no_tasks to args.tasks.no_tasks
     # add no_datasets to args.tasks.no_datasets
@@ -70,17 +86,9 @@ def fix_data(data: Dict):
     data["last_eval_acc"] = [x["acc"] for x in last_eval]
 
     # Extra columns ->
-    task_info = data["args"]["tasks"]
-    task_name = f'{task_info["datasets"]}'
-    task_name += f'_i{np.prod(task_info["in_size"])}'
-    task_name += f'_rt{int(task_info["reset_targets"])}'
-    task_name += f'_v{task_info["validation"]}'
-    task_name += f'_s{task_info["split"]}'
-    task_name += f'_p{task_info["perms_no"]}'
-    task_name += f'_pt{int(task_info["permute_targets"])}'
-    task_name += f'_c{int(task_info["common_head"])}'
 
-    data["task_name"] = task_name
+    data["task_name"] = get_task_name(data)
+
     return data
 
 

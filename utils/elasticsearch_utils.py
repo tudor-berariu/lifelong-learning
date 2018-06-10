@@ -20,6 +20,8 @@ def init_elastic_client():
 
 
 def update_data():
+    from upload_to_elasticsearch import get_task_name
+
     """Example of script to use to update on server"""
     es = init_elastic_client()
 
@@ -40,7 +42,8 @@ def update_data():
             len_tasks = len(hit["_source"]["task_info"])
             es.update(index="phd", doc_type='lifelong', id=hit["_id"], body={
                 "doc": {
-                    "args": {"tasks": {"no_tasks": len_tasks, "no_datasets": len_datasets}}
+                    # "args": {"tasks": {"no_tasks": len_tasks, "no_datasets": len_datasets}}
+                    "task_name": get_task_name(hit["_source"])
                 }
             })
 

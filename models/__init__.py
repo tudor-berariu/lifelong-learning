@@ -6,6 +6,10 @@ ALL_MODELS = {
     "lenet": LeNet
 }
 
+ALL_MODELS_BASE_TYPE = {
+    "mlp": "mlp",
+    "lenet": "lenet"
+}
 
 def get_model(name):
     # @name         : name of the model

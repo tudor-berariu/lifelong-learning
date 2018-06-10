@@ -46,16 +46,13 @@ def train_simultaneously(model_class: Type,
     no_nan_loss = 0
 
     # -- LR Scheduler
-
     optim_args = args.train._optimizer
     if hasattr(optim_args, "lr_decay"):
         step = optim_args.lr_decay.step
         gamma = optim_args.lr_decay.gamma
         scheduler = MultiStepLR(optimizer,
-                                milestones=list(range(step * no_tasks,
-                                                      epochs_per_task * no_tasks,
-                                                      step * no_tasks)),
-                                gamma=gamma)
+                                milestones=list(range(step * no_tasks, epochs_per_task * no_tasks,
+                                                      step * no_tasks)), gamma=gamma)
     else:
         scheduler = None
 
@@ -109,6 +106,6 @@ def train_simultaneously(model_class: Type,
         if crt_epoch % save_report_freq == 0:
             report.save()
 
-    report.finished_training_task(1, seen)
+        report.finished_training_task(no_tasks, seen)
 
     report.save(final=True)

@@ -13,6 +13,7 @@ import os
 from my_types import Args
 from utils.util import get_ip, redirect_std, repair_std, get_utc_time
 from utils.elasticsearch_utils import mark_uploaded_name
+from models import ALL_MODELS_BASE_TYPE
 
 Accuracy = float
 Loss = float
@@ -31,6 +32,56 @@ EvalResult = NamedTuple(
      ("dataset_avg", Dict[str, Dict[str, float]]),
      ("global_avg", Dict[str, float])]
 )
+
+EVAL_METRICS_BASE = dict({
+            # RAW SCORES (Trained tasks)
+            "score_new_raw": [],
+            "score_base_raw": [],
+            "score_all_raw": [],
+
+            # Scaled to base (Trained tasks)
+            "score_all_last": [],
+            "score_new": -1,
+            "score_base": -1,
+            "score_all": -1,
+            "score_last": -1,
+
+            # Not scaled (Trained tasks)
+            "_score_all_last": [],
+            "_score_new": -1,
+            "_score_base": -1,
+            "_score_all": -1,
+            "_score_last": -1,
+
+            # Global (All evaluated tasks)
+            "global_avg": [],
+            "best_global_avg": -1,
+            "seen": -1,
+
+            "_global_avg": [],
+            "_best_global_avg": -1,
+            "_seen": -1,
+        })
+
+EPISODIC_METRICS = ["global_avg", "best_global_avg", "seen"]
+EPISODIC_METRICS.extend(["_" + x for x in EPISODIC_METRICS])
+
+
+def get_score_baseline():
+    import pandas as pd
+    df = pd.read_csv("configs/base_scores")
+    return df
+
+
+def get_base_score(task_info: List[Dict], model_name: str):
+    task_base_ind = dict()
+
+    df_base = get_score_baseline()
+    for x in task_info:
+        base = df_base[df_base["dataset_name"] == x["dataset_name"]]
+        base = base[base["model_base_type"] == ALL_MODELS_BASE_TYPE[model_name]]
+        task_base_ind[x["idx"]] = base.iloc[0]["base_score"]
+    return task_base_ind
 
 
 class TensorboardSummary(object):
@@ -133,8 +184,11 @@ class Reporting(object):
                                                  f"{os.path.basename(file_path)}_script"))
 
         # Should read baseline for each task (individual/ simultanous)
-        self.task_base_ind = dict({x["idx"]: x["best_individual"] for x in task_info})
-        self.task_base_sim = dict({x["idx"]: x["best_simultaneous"] for x in task_info})
+        self.task_base_ind = get_base_score(task_info, args.model.name)
+
+        # Update task base ind in task_info
+        for x in task_info:
+            x["best_individual"] = self.task_base_ind[x["idx"]]
 
         self.task_idx_to_dataset = task_idx_to_name = dict({x["idx"]: x["dataset_name"]
                                                             for x in task_info})
@@ -168,15 +222,7 @@ class Reporting(object):
         self._last_train = deepcopy(self._last_eval)
 
         self._task_train_tick: List[Dict] = []
-        self._eval_metrics: Dict = dict({
-            "score_new_raw": [],
-            "score_base_raw": [],
-            "score_all_raw": [],
-            "score_all_last_raw": [],
-            "score_new": -1,
-            "score_base": -1,
-            "score_all_all": -1,
-        })
+        self._eval_metrics: Dict = deepcopy(EVAL_METRICS_BASE)
 
         # The following variables will be saved in a dictionary
         self.big_data = ["_train_trace", "_eval_trace", "_task_train_tick"]
@@ -375,23 +421,31 @@ class Reporting(object):
 
     def finished_training_task(self, no_trained_tasks: int, seen: int) -> None:
         print(''.join("" * 79))
-
         print(f"Finished training {clr(f'{no_trained_tasks}', attrs=['bold']):s}"
               f"\t seen: {seen} images")
 
         last_eval = self._last_eval
         task_train_tick = self._task_train_tick
+        mode = self.mode
+        plot_t = self.plot_t
+        eval_metrics = self._eval_metrics
+        base = self.task_base_ind
+
+        update_scores = self.update_scores
+        update_episodic_scores = self.update_episodic_scores
+        norm_scores = self.norm_scores
 
         eval_data = dict({})
-
         task_eval_data = dict({})
-
         not_evaluated = []
         for task_idx, value in last_eval.items():
             if value["seen"] == seen:
-                task_eval_data[task_idx] = value
+                task_eval_data[task_idx] = deepcopy(value)
             else:
                 not_evaluated.append(task_idx)
+
+        # ==========================================================================================
+        # -- Aggregate data
 
         tasks_idxs = []
         all_acc = []
@@ -401,8 +455,10 @@ class Reporting(object):
             all_acc.append(task_eval_data[key]["acc"])
             all_loss.append(task_eval_data[key]["loss"])
 
-        eval_data["task"] = task_eval_data
+        base_ordered = [base[i] for i in range(no_trained_tasks)]
+        no_scale_base = {ix: 1. for ix in base.keys()}
 
+        eval_data["task"] = task_eval_data
         eval_data["global_avg"] = {
             "mean_acc_all": np.mean(all_acc),
             "mean_loss_all": np.mean(all_loss),
@@ -415,38 +471,42 @@ class Reporting(object):
             "acc": all_acc,
             "loss": all_loss
         }
-
         task_train_tick.append(eval_data)
 
-        # Calculate metrics
-        eval_metrics = self._eval_metrics
-        eval_metrics["score_new_raw"].append(task_eval_data[no_trained_tasks-1]["acc"])
-        if 0 in task_eval_data:
-            eval_metrics["score_base_raw"].append(task_eval_data[0]["acc"])
+        # ==========================================================================================
+        #  -- Calculate metrics
+
+        if mode == "sim":
+            eval_metrics["score_new_raw"].append(task_eval_data[no_trained_tasks-1]["acc"])
+            if 0 in task_eval_data:
+                eval_metrics["score_base_raw"].append(task_eval_data[0]["acc"])
+            else:
+                eval_metrics["score_base_raw"].append(eval_metrics["score_base_raw"][-1])
+
+            eval_metrics["score_all_raw"].append([])
+            for key in sorted(task_eval_data):
+                if key < no_trained_tasks:
+                    eval_metrics["score_all_raw"][-1].append(task_eval_data[key]["acc"])
         else:
-            eval_metrics["score_base_raw"].append(eval_metrics["score_base_raw"][-1])
+            # Fix for Simultanous mode (trained on all tasks)
+            eval_metrics["score_new_raw"] = all_acc
+            eval_metrics["score_base_raw"] = all_acc
+            eval_metrics["score_all_raw"] = [all_acc]
 
-        score_all = 0
-        score_all_raw = []
-        base = self.task_base_ind
-        base_ordered = [base[i] for i in range(no_trained_tasks)]
+        # Update base scores
+        _ = update_scores(eval_metrics, no_scale_base, t="_")
+        update_episodic_scores(eval_metrics, no_scale_base, eval_metrics["_score_last"], all_acc,
+                               seen, t="_")
+        scores = update_scores(eval_metrics, base)
+        update_episodic_scores(eval_metrics, base, eval_metrics["score_last"], all_acc, seen)
+        # ==========================================================================================
 
-        for key in sorted(task_eval_data):
-            if key < no_trained_tasks:
-                score_all += task_eval_data[key]["acc"] / base[key]
-                score_all_raw.append(task_eval_data[key]["acc"])
-
-        score_all = score_all / float(no_trained_tasks)
-
-        eval_metrics["score_all_raw"].append(score_all_raw)
-        eval_metrics["score_all_last_raw"].append(score_all)
-
-        score_new_s = self.norm_scores(eval_metrics["score_new_raw"], base_ordered)
-        score_base_s = self.norm_scores(eval_metrics["score_base_raw"], base_ordered)
-        score_all_s = eval_metrics["score_all_last_raw"]
-
-        scores = self.calc_scores(eval_metrics, base)
-        eval_metrics.update(scores)
+        # ==========================================================================================
+        # -- Print metrics
+        score_new_s = norm_scores(eval_metrics["score_new_raw"], base_ordered)
+        score_base_s = norm_scores(eval_metrics["score_base_raw"],
+                                   [base_ordered[0]] * len(eval_metrics["score_base_raw"]))
+        score_all_s = eval_metrics["score_all_last"]
 
         score_new = eval_metrics["score_new"]
         score_base = eval_metrics["score_base"]
@@ -461,8 +521,6 @@ class Reporting(object):
         print(f"\t[{idx:3}] score All's  (n):   [{score_all:3.6f}]    [{l_msg(score_all_s)}]")
 
         # Plot
-        mode = self.mode
-        plot_t = self.plot_t
         if mode == "seq":
             if plot_t:
                 plot_t.tick([("global/average", eval_data["global_avg"], no_trained_tasks)])
@@ -475,34 +533,52 @@ class Reporting(object):
         print(''.join("" * 79))
 
     @staticmethod
-    def norm_scores(scores: List[float], base: List[float]):
+    def norm_scores(scores: List[float], base: List[float]) -> List[float]:
         return [s / b for s, b in zip(scores, base)]
 
     @staticmethod
-    def calc_scores(scores: Dict, base_scores: Dict):
+    def update_scores(scores: Dict, base_scores: Dict, t: str = ""):
         score_new_raw = scores["score_new_raw"]
         score_base_raw = scores["score_base_raw"]
         score_all_raw = scores["score_all_raw"]
-        no_tasks = len(score_new_raw)
 
+        no_trained_tasks = len(score_all_raw)
         score_new, score_base, score_all = 0, 0, []
-        for ix in range(no_tasks):
+
+        for ix in range(no_trained_tasks):
             score_new += score_new_raw[ix] / base_scores[ix]
-            score_base += score_base_raw[ix] / base_scores[ix]
+            score_base += score_base_raw[ix] / base_scores[0]
             score_all.append(np.mean([v / base_scores[i] for i, v in enumerate(score_all_raw[ix])]))
 
-        score_new = score_new / float(no_tasks)
-        score_base = score_base / float(no_tasks)
+        score_new = score_new / float(no_trained_tasks)
+        score_base = score_base / float(no_trained_tasks)
         score_last = score_all[-1]
         score_all = np.mean(score_all)
 
-        scores = {
-            "score_new": score_new,
-            "score_base": score_base,
-            "score_all": score_all,
-            "score_last": score_last
+        new_scores = {
+            t+"score_new": score_new,
+            t+"score_base": score_base,
+            t+"score_all": score_all,
+            t+"score_last": score_last
         }
-        return scores
+
+        scores.update(new_scores)
+
+        return new_scores
+
+    @staticmethod
+    def update_episodic_scores(scores: Dict, base_scores: Dict,
+                               score_last: List[float],
+                               all_acc: List[float], seen: int,
+                               t: str = ""):
+        scores[t + "score_all_last"].append(score_last)
+        base_ordered = [base_scores[i] for i in range(len(all_acc))]
+        all_acc_avg = np.mean(Reporting.norm_scores(all_acc, base_ordered))
+        scores[t + "global_avg"].append(all_acc_avg)
+        if scores[t + "best_global_avg"] < all_acc_avg:
+            scores[t + "best_global_avg"] = all_acc_avg
+            scores[t + "seen"] = seen
+
 
     @property
     def get_dataset_avg(self) -> Dict:
