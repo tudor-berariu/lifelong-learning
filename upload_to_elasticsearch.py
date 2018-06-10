@@ -183,8 +183,6 @@ def run_full_report_upload(args):
 
 
 if __name__ == "__main__":
-    mp.set_start_method('spawn')
-
     parser = argparse.ArgumentParser(
         description='Upload data to Elasticserch server.\n'
                     '- All folders in list will be replaced by results.pkl file obtained '
