@@ -666,6 +666,12 @@ class Reporting(object):
                 print(f"[ERROR] File empty: {save_data_path}")
                 return 334
 
+            try:
+                save_data = torch.load(save_data_path)
+            except Exception as e:
+                print(f"[ERROR] Can't open {save_data_path} err: {e}")
+                return 335
+
             save_data = torch.load(save_data_path)
             if file_path is None:
                 file_path = save_data_path

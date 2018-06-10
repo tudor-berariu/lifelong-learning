@@ -18,7 +18,11 @@ def run_fix(args):
     p_idx, file_path, force = args
     print(f"[_{p_idx}_] Working on: {file_path}")
 
-    data = torch.load(file_path)
+    try:
+        data = torch.load(file_path)
+    except Exception as e:
+        print(f"[_{p_idx}_] [ERROR] Can't open {file_path} err: {e}")
+        return 1
 
     fix = False
     if "_start_timestamp" not in data:

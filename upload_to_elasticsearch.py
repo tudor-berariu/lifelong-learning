@@ -111,7 +111,12 @@ def upload_eData_to_elastic(args):
             print(f"[_{pidx}_] " + f"[ERROR] File empty: {file_path}")
             continue
 
-        data: Dict = torch.load(file_path)
+        try:
+            data = torch.load(file_path)
+        except Exception as e:
+            print(f"[_{p_idx}_] [ERROR] Can't open {file_path} err: {e}")
+            continue
+
         data = fix_data(data)
 
         if not first_data:
