@@ -95,10 +95,10 @@ def fix_data(data: Dict):
 
 
 def upload_eData_to_elastic(args):
-    pidx, file_paths, force_update = args
+    p_idx, file_path, force_update = args
 
-    print(f"[_{pidx}_] Process eData")
-    print(f"[_{pidx}_] " + "=" * 79)
+    print(f"[_{p_idx}_] Process eData")
+    print(f"[_{p_idx}_] " + "=" * 79)
 
     es: Elasticsearch = init_elastic_client()
     indices = es.indices.get_alias("*")
@@ -106,54 +106,55 @@ def upload_eData_to_elastic(args):
     if "phd" not in indices:
         first_data = True
 
-    for file_path in file_paths:
-        if os.path.getsize(file_path) <= 0:
-            print(f"[_{pidx}_] " + f"[ERROR] File empty: {file_path}")
-            continue
+    if os.path.getsize(file_path) <= 0:
+        print(f"[_{p_idx}_] " + f"[ERROR] File empty: {file_path}")
+        return 333
 
-        try:
-            data = torch.load(file_path)
-        except Exception as e:
-            print(f"[_{pidx}_] [ERROR] Can't open {file_path} err: {e}")
-            continue
+    try:
+        data = torch.load(file_path)
+    except Exception as e:
+        print(f"[_{p_idx}_] [ERROR] Can't open {file_path} err: {e}")
+        return 334
 
-        data = fix_data(data)
+    data = fix_data(data)
 
-        if not first_data:
-            res, found_items = search_by_timestamp(data["start_timestamp"])
+    if not first_data:
+        res, found_items = search_by_timestamp(data["start_timestamp"])
 
-            if not force_update and found_items > 0:
-                print(f"[_{pidx}_] " +
-                      f"[ERROR] Already found item in database (by timestamp): {file_path}")
-                title = res["hits"]["hits"][0]["_source"]["args"]["title"]
-                if title != data["args"]["title"]:
-                    print(f"[_{pidx}_] " + f".... But not by name?!?!: {file_path}")
-                else:
-                    print(f"[_{pidx}_] " + f"[ERROR] SKIP Duplicate")
-                    continue
+        if not force_update and found_items > 0:
+            print(f"[_{p_idx}_] " +
+                  f"[ERROR] Already found item in database (by timestamp): {file_path}")
+            title = res["hits"]["hits"][0]["_source"]["args"]["title"]
+            if title != data["args"]["title"]:
+                print(f"[_{p_idx}_] " + f".... But not by name?!?!: {file_path}")
+            else:
+                print(f"[_{p_idx}_] " + f"[ERROR] SKIP Duplicate")
+                return 335
 
-        out_filepath = file_path + "_out"
-        fsock, old_stdout, old_stderr = redirect_std(out_filepath)
+    out_filepath = file_path + "_out"
+    fsock, old_stdout, old_stderr = redirect_std(out_filepath)
+    res = None
 
-        try:
-            res = es.index(index='phd',  doc_type='lifelong', body=data)
-        except Exception as e:
-            print(f"[_{pidx}_] " + clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
-            print(f"[_{pidx}_] " + clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
-            print(f"[_{pidx}_] " + clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
-            print(f"[_{pidx}_] " + "\nPLEASE do manual push :)")
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            traceback.print_exception(exc_type, exc_value, exc_traceback,
-                                      limit=100, file=sys.stdout)
-
+    try:
+        res = es.index(index='phd',  doc_type='lifelong', body=data)
+    except Exception as e:
+        print(f"[_{p_idx}_] " + clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
+        print(f"[_{p_idx}_] " + clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
+        print(f"[_{p_idx}_] " + clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
+        print(f"[_{p_idx}_] " + "\nPLEASE do manual push :)")
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        traceback.print_exception(exc_type, exc_value, exc_traceback,
+                                  limit=100, file=sys.stdout)
+    if res:
         if res["result"] == "created":
             repair_std(out_filepath, fsock, old_stdout, old_stderr)
 
             os.remove(file_path)
             os.remove(out_filepath)
 
-        print(f"[_{pidx}_] " + f"INDEXED: {file_path}")
-    print(f"[_{pidx}_] " + "=" * 79)
+    print(f"[_{p_idx}_] " + f"INDEXED: {file_path}")
+
+    print(f"[_{p_idx}_] " + "=" * 79)
 
 
 def analyze_mapper_exection():
@@ -252,4 +253,3 @@ if __name__ == "__main__":
         p = mp.Pool(args.procs)
         p.map(run_full_report_upload,
               zip(range(len(results_file_paths)), results_file_paths, itertools.repeat(args)))
-
