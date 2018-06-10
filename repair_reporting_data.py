@@ -191,8 +191,8 @@ if __name__ == "__main__":
         description='Repair bugged versions.')
 
     parser.add_argument(dest="paths", nargs='+', help='<Required> List of reporting.pkl files')
-    parser.add_argument("-p", "--procs", type=int, required=True, action="store",
-                        default=4, help=f'PROCS_NO')
+    parser.add_argument("-p", "--procs", type=int, action="store",
+                        default=1, help=f'PROCS_NO')
     parser.add_argument('-f', action="store_true", dest="force",
                         default=False, help=f'Force update all')
 

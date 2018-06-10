@@ -212,8 +212,8 @@ if __name__ == "__main__":
     parser.add_argument("--push-to-server",
                         type=lambda s: s.lower() in ['true', 't', 'yes', '1'], default=True,
                         help=f'Push eData to server. )')
-    parser.add_argument("-p", "--procs", type=int, required=True, action="store",
-                        default=4, help=f'PROCS_NO')
+    parser.add_argument("-p", "--procs", type=int, action="store",
+                        default=1, help=f'PROCS_NO')
 
     args = parser.parse_args()
 
