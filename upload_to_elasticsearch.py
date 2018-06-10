@@ -217,9 +217,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Parse first argument if it was given by <| xargs -0 -Ifoo>
-    args.paths = split_first_argument(args.paths)
-
     edata_file_paths = []
     results_file_paths = []
 

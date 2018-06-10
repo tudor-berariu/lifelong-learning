@@ -198,8 +198,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Parse first argument if it was given by <| xargs -0 -Ifoo>
-    args.paths = split_first_argument(args.paths)
     if os.path.isdir(args.paths[0]):
         args.paths = glob.glob(f"{args.paths[0]}/**/reporting.pkl", recursive=True)
 
