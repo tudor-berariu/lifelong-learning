@@ -18,7 +18,7 @@ import numpy as np
 import torch.multiprocessing as mp
 import itertools
 
-from utils.elasticsearch_utils import init_elastic_client, search_by_timestamp
+from utils.elasticsearch_utils import init_elastic_client, search_by_timestamp, eINDEX, eDOC
 from utils.util import repair_std, redirect_std, split_first_argument
 from utils.reporting import Reporting, BIG_DATA_KEYS
 
@@ -103,7 +103,7 @@ def upload_eData_to_elastic(args):
     es: Elasticsearch = init_elastic_client()
     indices = es.indices.get_alias("*")
     first_data = False
-    if "phd" not in indices:
+    if eINDEX not in indices:
         first_data = True
 
     if os.path.getsize(file_path) <= 0:
@@ -147,15 +147,13 @@ def upload_eData_to_elastic(args):
 
     try:
         if force_update and match is not None:
-            es.update(index="phd", doc_type='lifelong', id=match_id, body={
+            es.update(index=eINDEX, doc_type=eDOC, id=match_id, body={
                 "doc": data
             })
         else:
-            res = es.index(index='phd',  doc_type='lifelong', body=data)
+            res = es.index(index=eINDEX,  doc_type=eDOC, body=data)
     except Exception as e:
-        print(f"[_{p_idx}_] " + clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
-        print(f"[_{p_idx}_] " + clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
-        print(f"[_{p_idx}_] " + clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
+        print(f"[_{p_idx}_] [ERROR] " + clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
         print(f"[_{p_idx}_] " + "\nPLEASE do manual push :)")
         exc_type, exc_value, exc_traceback = sys.exc_info()
         traceback.print_exception(exc_type, exc_value, exc_traceback,
