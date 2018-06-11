@@ -51,6 +51,31 @@ def update_data():
         res = es.scroll(scroll_id=scroll, scroll='1m')
 
 
+def clean_almost_all():
+    """Example of script to use to update on server"""
+    es = init_elastic_client()
+
+    doc = {
+        'size': 1000,
+        'query': {
+            'match_all': {}
+        }
+    }
+    ignore_key = "OlsJ62MBm5wd3rDH8tVA"
+
+    res = es.search(index="phd", doc_type='lifelong', body=doc, scroll='1m')
+    while len(res["hits"]["hits"]) > 0:
+        hits = res["hits"]["hits"]
+
+        # Update value:
+        for hit in hits:
+            if hit["_id"] != ignore_key:
+                es.delete(index="phd", doc_type='lifelong',  id=hit["_id"])
+
+        scroll = res['_scroll_id']
+        res = es.scroll(scroll_id=scroll, scroll='1m')
+
+
 def search_by_timestamp(start_timestamp, es=None):
     query = {
         "query": {

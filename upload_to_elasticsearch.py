@@ -167,7 +167,11 @@ def upload_eData_to_elastic(args):
             os.remove(file_path)
             os.remove(out_filepath)
 
-    print(f"[_{p_idx}_] " + f"INDEXED: {file_path}")
+            print(f'[_{p_idx}_] INDEXED: {file_path} -- ID: {res["_id"]}')
+        else:
+            print(f'[_{p_idx}_] [ERROR] {file_path} -- result: {res["result"]}')
+    else:
+        print(f'[_{p_idx}_] [ERROR] {file_path} -- Res: {res}')
 
     print(f"[_{p_idx}_] " + "=" * 79)
 
