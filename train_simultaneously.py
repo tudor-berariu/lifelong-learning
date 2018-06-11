@@ -41,6 +41,7 @@ def train_simultaneously(model_class: Type,
     save_report_freq = args.reporting.save_report_freq
 
     seen = 0
+    all_val_epoch = 0
     val_epoch = 0
     not_better = 0
     no_nan_loss = 0
@@ -67,7 +68,7 @@ def train_simultaneously(model_class: Type,
         seen += train_seen
 
         train_info = {"acc": train_acc, "loss": train_loss}
-        report.trace_train(seen, train_task_idx, crt_epoch, train_info)
+        report.trace_train(seen, train_task_idx, crt_epoch, crt_epoch, train_info)
 
         all_tasks_new_best_acc = 0
         all_tasks_new_best_loss = 0
@@ -79,9 +80,10 @@ def train_simultaneously(model_class: Type,
             val_info = {"acc": val_acc, "loss": val_loss}
 
             new_best_acc, new_best_loss = report.trace_eval(seen, task_idx, crt_epoch,
-                                                            val_epoch, val_info)
+                                                            val_epoch, all_val_epoch, val_info)
             all_tasks_new_best_acc += new_best_acc
             all_tasks_new_best_loss += new_best_loss
+            all_val_epoch += 1
 
         # Check improvements
         if all_tasks_new_best_acc + all_tasks_new_best_loss > 0:

@@ -72,6 +72,7 @@ class BaseAgent(object):
         self.seen: int = 0
         self.all_epochs: int = 0
         self.all_eval_epochs: int = 0
+        self.all_eval_ind_epochs: int = 0
         self.crt_task_epoch: int = -1
         self.crt_task_idx: int = 0
         self.crt_data_loaders: Iterator[Tuple[TaskDataLoader, TaskDataLoader]] = None
@@ -142,7 +143,8 @@ class BaseAgent(object):
                 # Get information to feed to reporting agent
                 train_info = {"acc": train_acc, "loss": train_loss}
                 train_info.update(info)
-                report.trace_train(self.seen, train_task_idx, crt_epoch, train_info)
+                report.trace_train(self.seen, train_task_idx, crt_epoch,
+                                   self.all_epochs, train_info)
 
                 # Evaluate
                 if crt_epoch % self.eval_freq == 0 or crt_epoch == (self.epochs_per_task - 1):
@@ -161,6 +163,7 @@ class BaseAgent(object):
 
                         new_best_acc, new_best_loss = report.trace_eval(self.seen, val_task_idx,
                                                                         crt_epoch, eval_epoch,
+                                                                        self.all_eval_ind_epochs,
                                                                         val_info)
                         new_best_acc_cnt += new_best_acc
                         new_best_loss_cnt += new_best_loss
@@ -173,6 +176,8 @@ class BaseAgent(object):
                                 eval_no_improvement += 1
                                 if eval_no_improvement > self.early_stop:
                                     early_stop_task = True
+
+                        self.all_eval_ind_epochs += 1
 
                     self.crt_eval_epoch += 1
                     self.all_eval_epochs += 1

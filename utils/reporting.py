@@ -204,6 +204,9 @@ class Reporting(object):
         self._max_seen_eval = -1
         self._trained_before_eval = []
         self._has_evaluated = False
+        self._max_train_all_epoch = -1
+        self._max_eval_all_epoch = -1
+        self._finished_experiment = False
 
         self._start_timestamp = time.time()
         self._start_time = get_utc_time()
@@ -228,7 +231,9 @@ class Reporting(object):
         self.big_data = ["_train_trace", "_eval_trace", "_task_train_tick"]
         self._save_variables = ["_start_time", "_start_timestamp", "_args",
                                 "_best_eval", "_last_eval", "_task_info",
-                                "_eval_metrics", "_model_summary"]
+                                "_eval_metrics", "_model_summary", "_max_train_all_epoch",
+                                "_max_eval_all_epoch", "_max_seen_train", "_max_seen_eval",
+                                "_finished_experiment"]
         if self.save_report_trace:
             self._save_variables.extend(self.big_data)
 
@@ -283,11 +288,13 @@ class Reporting(object):
         plot_c.log_parameter()
         return plot_c
 
-    def trace_train(self, seen_training: int, task_idx: int, train_epoch: int, info: dict):
+    def trace_train(self, seen_training: int, task_idx: int,
+                    train_epoch: int, all_epochs: int, info: dict):
         info = deepcopy(info)
 
         trace = self._train_trace
         self._max_seen_train = seen_training
+        self._max_train_all_epoch = all_epochs
 
         if self._has_evaluated:
             self._has_evaluated = False
@@ -329,12 +336,13 @@ class Reporting(object):
         pass
 
     def trace_eval(self, seen_training: int, task_idx: int, train_epoch: int, val_epoch: int,
-                   info: dict) -> Tuple[bool, bool]:
+                   all_val_epoch: int, info: dict) -> Tuple[bool, bool]:
         info = deepcopy(info)
 
         self._has_evaluated = True
         trace = self._eval_trace
         self._max_seen_eval = seen_training
+        self._max_eval_all_epoch = all_val_epoch
 
         if seen_training not in trace:
             trace[seen_training] = dict({})
@@ -476,7 +484,7 @@ class Reporting(object):
         # ==========================================================================================
         #  -- Calculate metrics
 
-        if mode == "sim":
+        if mode == "seq":
             eval_metrics["score_new_raw"].append(task_eval_data[no_trained_tasks-1]["acc"])
             if 0 in task_eval_data:
                 eval_metrics["score_base_raw"].append(task_eval_data[0]["acc"])
@@ -617,9 +625,13 @@ class Reporting(object):
         return global_avg
 
     def save(self, final=False):
+        if final:
+            self._finished_experiment = True
+
         save_data = {key: self.__dict__[key] for key in self._save_variables}
         if final:
             save_data["_end_time"] = get_utc_time()
+
         torch.save(save_data, self._save_path)
         if final:
             self.experiment_finished(save_data, ignore_keys=self.big_data,

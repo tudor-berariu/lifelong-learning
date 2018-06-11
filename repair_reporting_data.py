@@ -35,9 +35,16 @@ def run_fix(args):
     if not isinstance(data["_args"], dict):
         data["_args"] = namespace_to_dict(data["_args"])
 
+    # Add keys of repairs
+    if "__repairs" not in data:
+        data["__repairs"] = repair_keys = []
+    else:
+        repair_keys = data["__repairs"]
+
     # ==============================================================================================
-    # -- Repair Last eval
-    if start_time < dateparser.parse("Jun 12 2018 12:00AM") or force:
+    # -- Repair Last eval (1)
+    KEY = 0
+    if (start_time < dateparser.parse("Jun 12 2018 12:00AM") and KEY not in repair_keys) or force:
         print(f"[_{p_idx}_] Repair Last eval ...")
 
         if "_eval_trace" in data:
@@ -58,12 +65,15 @@ def run_fix(args):
 
             data["_best_eval"] = best_eval
             fix = True
+            repair_keys.append(KEY)
         else:
             print(f"[_{p_idx}_] Does not have key: _eval_trace")
 
+
     # ==============================================================================================
     # -- Repair Task Train tick
-    if start_time < dateparser.parse("Jun 12 2018 12:00AM") or force:
+    KEY = 1
+    if (start_time < dateparser.parse("Jun 12 2018 12:00AM") and KEY not in repair_keys) or force:
         if data["_args"]["mode"] != "sim":
 
             print(f"[_{p_idx}_] Repair Task Train tick ...")
@@ -84,12 +94,16 @@ def run_fix(args):
                 task_train_tick_idx += 1
                 ix += epochs_per_task
 
+            fix = True
+            repair_keys.append(KEY)
+
     # ==============================================================================================
     # -- Repair bugged Eval metrics calc for simultaneous mode
-    if start_time < dateparser.parse("Jun 12 2018 12:00AM") or force:
-        print(f"[_{p_idx}_] Repair bugged Eval metrics calc for simultaneous mode ...")
-
+    KEY = 2
+    if (start_time < dateparser.parse("Jun 12 2018 12:00AM") and KEY not in repair_keys) or force:
         if data["_args"]["mode"] == "sim":
+            print(f"[_{p_idx}_] Repair bugged Eval metrics calc for simultaneous mode ...")
+
             evm = data["_eval_metrics"]
             last_eval = data["_last_eval"]
             acc = []
@@ -108,11 +122,12 @@ def run_fix(args):
                 'score_all': all,
                 'score_last': new})
             fix = True
+            repair_keys.append(KEY)
 
     # ==============================================================================================
     # -- Recalculate metrics
-
-    if start_time < dateparser.parse("Jun 12 2018 12:00AM") or force:
+    KEY = 3
+    if (start_time < dateparser.parse("Jun 12 2018 12:00AM") and KEY not in repair_keys) or force:
         print(f"[_{p_idx}_] Recalculate metrics ...")
 
         # Update missing keys
@@ -179,6 +194,42 @@ def run_fix(args):
         data["_eval_metrics"] = eval_metrics
 
         fix = True
+        repair_keys.append(KEY)
+
+    # ==============================================================================================
+    # -- Add keys: _max_eval_all_epoch, _max_seen_train, _max_seen_eval, _finished_experiment
+    KEY = 4
+    if (start_time < dateparser.parse("Jun 12 2018 12:00AM") and KEY not in repair_keys) or force:
+        if "_finished_experiment" not in data:
+            print(f"[_{p_idx}_] Add keys _finished_experiment ...")
+
+            max_eval = -1
+            for k1, v1 in data["_eval_trace"].items():
+                for k2, v2 in v1.items():
+                    max_eval += len(v2)
+            max_train = -1
+            for k1, v1 in data["_train_trace"].items():
+                for k2, v2 in v1.items():
+                    max_train += len(v2)
+
+            data["_max_eval_all_epoch"] = max_eval
+            data["_max_train_all_epoch"] = max_train
+            data["_max_seen_train"] = max_seen_train= max(data["_train_trace"].keys())
+            data["_max_seen_eval"] = max_seen_eval = max(data["_eval_trace"].keys())
+
+            # Check if finished or no
+            no_tasks = len(data["_task_info"])
+            epochs_per_task = data["_args"]["train"]["epochs_per_task"]
+            should_train = no_tasks * epochs_per_task
+            reached_max_train = should_train == max_train + 1
+            same_seen = data["_max_seen_train"] == data["_max_seen_eval"]
+            all_final_tasks_evaluated = len(data["_eval_trace"][max_seen_eval]) == no_tasks
+
+            data["_finished_experiment"] = reached_max_train \
+                                           and same_seen and all_final_tasks_evaluated
+
+            fix = True
+            repair_keys.append(KEY)
 
     if fix:
         torch.save(data, file_path)
