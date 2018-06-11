@@ -37,7 +37,8 @@ def train_sequentially(model_class: Callable[[Any], nn.Module],
     save_report_freq = args.reporting.save_report_freq
     seen = 0
     no_tasks = len(multitask)
-
+    all_epochs = 0
+    all_val_epochs = 0
 
     # -- LR Scheduler
 
@@ -69,7 +70,7 @@ def train_sequentially(model_class: Callable[[Any], nn.Module],
             seen += len(train_loader)
 
             train_info = {"acc": train_acc, "loss": train_loss}
-            report.trace_train(seen, train_task_idx, crt_epoch, train_info)
+            report.trace_train(seen, train_task_idx, crt_epoch, all_epochs, train_info)
 
             # Evaluate
             if crt_epoch % eval_freq == 0 or crt_epoch == (epochs_per_task - 1):
@@ -81,12 +82,16 @@ def train_sequentially(model_class: Callable[[Any], nn.Module],
                     val_info = {"acc": val_acc, "loss": val_loss}
 
                     new_best_acc, new_best_loss = report.trace_eval(seen, test_task_idx, crt_epoch,
-                                                                    val_epoch, val_info)
+                                                                    val_epoch, all_val_epochs,
+                                                                    val_info)
+                    all_val_epochs += 1
 
             val_epoch += 1
 
             if crt_epoch % save_report_freq == 0:
                 report.save()
+
+            all_epochs += 1
 
         report.save()
 

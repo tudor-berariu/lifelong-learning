@@ -32,6 +32,8 @@ def train_individually(init_model: Callable[[Any], nn.Module],
 
     report = Reporting(args, multitask.get_task_info())
     save_report_freq = args.reporting.save_report_freq
+    all_epoch = 0
+    all_val_epoch = 0
 
     for task_idx, data_loaders in enumerate(train_tasks):
         train_loader, validate_loader = data_loaders
@@ -74,12 +76,14 @@ def train_individually(init_model: Callable[[Any], nn.Module],
             train_info = {"acc": train_acc, "loss": train_loss}
             val_info = {"acc": val_acc, "loss": val_loss}
 
-            report.trace_train(seen, task_idx, crt_epoch, train_info)
+            report.trace_train(seen, task_idx, crt_epoch, all_epoch, train_info)
             new_best_acc, new_best_loss = report.trace_eval(seen, task_idx, crt_epoch,
-                                                            val_epoch, val_info)
+                                                            val_epoch, all_epoch, val_info)
 
             if crt_epoch % save_report_freq == 0:
                 report.save()
+
+            all_epoch += 1
 
         report.finished_training_task(task_idx+1, seen)
 
