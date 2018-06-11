@@ -117,26 +117,41 @@ def upload_eData_to_elastic(args):
         return 334
 
     data = fix_data(data)
+    match = None
+    match_id = None
 
     if not first_data:
         res, found_items = search_by_timestamp(data["start_timestamp"])
 
-        if not force_update and found_items > 0:
+        if found_items > 0:
             print(f"[_{p_idx}_] " +
                   f"[ERROR] Already found item in database (by timestamp): {file_path}")
-            title = res["hits"]["hits"][0]["_source"]["args"]["title"]
-            if title != data["args"]["title"]:
+
+            for h in res["hits"]["hits"]:
+                title = h["_source"]["args"]["title"]
+                if title == data["args"]["title"]:
+                    match = h
+
+            if match is None:
                 print(f"[_{p_idx}_] " + f".... But not by name?!?!: {file_path}")
-            else:
+            elif not force_update:
                 print(f"[_{p_idx}_] " + f"[ERROR] SKIP Duplicate")
                 return 335
+            else:
+                match_id = match["_id"]
+                print(f"[_{p_idx}_] " + f"Will update {file_path} -- match_id: {match_id}")
 
     out_filepath = file_path + "_out"
     fsock, old_stdout, old_stderr = redirect_std(out_filepath)
     res = None
 
     try:
-        res = es.index(index='phd',  doc_type='lifelong', body=data)
+        if force_update and match is not None:
+            es.update(index="phd", doc_type='lifelong', id=match_id, body={
+                "doc": data
+            })
+        else:
+            res = es.index(index='phd',  doc_type='lifelong', body=data)
     except Exception as e:
         print(f"[_{p_idx}_] " + clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
         print(f"[_{p_idx}_] " + clr("COULD NOT PUSH TO SERVER!!!!!!!!!", "red"))
