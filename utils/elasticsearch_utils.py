@@ -196,7 +196,7 @@ def include_dict_complex_keys(data: Dict, include_keys: List[str],
         if smart_group > 0:
             flat_data = flatten_dict(key_data)
 
-            if np.any(flat_data.values()):
+            if not np.any(flat_data.values()):
                 continue
 
             df = pd.DataFrame([x.split(separator) for x in flat_data.keys()])
