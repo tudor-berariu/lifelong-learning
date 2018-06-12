@@ -14,15 +14,11 @@ from my_types import Args
 from utils.util import get_ip, redirect_std, repair_std, get_utc_time
 from utils.elasticsearch_utils import mark_uploaded_name
 from models import ALL_MODELS_BASE_TYPE
+from utils.key_defines import REMOTE_IP, REMOTE_HOST, SERVER_eFOLDER, SERVER_PYTHON, SERVER_eUPLOAD_SCRIPT
 
 Accuracy = float
 Loss = float
 
-REMOTE_IP = "141.85.232.73"
-REMOTE_HOST = "tempuser@141.85.232.73"
-SERVER_eFOLDER = "/home/tempuser/workspace/andrei/lifelong_tmp_data/"
-SERVER_PYTHON = "/home/tempuser/anaconda3/envs/andreiENV/bin/python"
-SERVER_SCRIPT = "/home/tempuser/workspace/andrei/lifelong-learning/upload_to_elasticsearch.py"
 
 BIG_DATA_KEYS = ["_train_trace", "_eval_trace", "_task_train_tick"]
 
@@ -792,7 +788,7 @@ class Reporting(object):
 
             # p = subprocess.Popen(remote_cmd + f"nohup {SERVER_PYTHON} {SERVER_SCRIPT} "
             #                                   f"{server_path} &", shell=True)
-            p = subprocess.Popen(remote_cmd + f"{SERVER_PYTHON} {SERVER_SCRIPT} {server_path}",
+            p = subprocess.Popen(remote_cmd + f"{SERVER_PYTHON} {SERVER_eUPLOAD_SCRIPT} {server_path}",
                                  shell=True)
             sts = wait_pid(p.pid, timeout=120)
 

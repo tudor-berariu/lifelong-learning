@@ -2,6 +2,8 @@ from elasticsearch import Elasticsearch
 import os
 import pandas as pd
 from typing import List, Dict, Callable, Any, Union, Tuple
+from copy import deepcopy
+import numpy as np
 
 pd.set_option('display.max_rows', 500)
 pd.set_option('display.max_columns', 500)
@@ -22,12 +24,24 @@ def flatten_dict(dd, separator='.', prefix=''):
             prefix + separator + str(k) if prefix else str(k): v
             for kk, vv in dd.items() for k, v in flatten_dict(vv, separator, str(kk)).items()
         }
-    else:
-        new_d = {prefix: dd}
+        return new_d
+    elif isinstance(dd, list):
+        if len(dd) > 0:
+            if isinstance(dd[0], dict):
+                new_d = {
+                    prefix + separator + str(k) if prefix else str(k): v
+                    for kk, vv in enumerate(dd) for k, v in
+                    flatten_dict(vv, separator, str(kk)).items()
+                }
+                return new_d
+
+    new_d = {prefix: dd}
     return new_d
 
 
 def is_numeric(vv):
+    if vv is None:
+        return False
     try:
         a = float(vv)
     except ValueError:
@@ -35,12 +49,17 @@ def is_numeric(vv):
     return True
 
 
+def get_type_string(vv):
+    s = str(type(float))
+    return s.replace("<class '", "").replace("'>", "")
+
+
 def flatten_dict_keys(dd, separator='.', prefix=''):
     """ Transform complex data recursive to unique keys """
     if isinstance(dd, dict):
         all_k = set()
         for kk, vv in dd.items():
-            k_name = "{int}" if is_numeric(kk) else kk
+            k_name = "[_]" if is_numeric(kk) else kk
             all_k.update(flatten_dict_keys(vv, separator=separator,
                                            prefix=f"{prefix}{k_name}{separator}"))
         return all_k
@@ -50,13 +69,180 @@ def flatten_dict_keys(dd, separator='.', prefix=''):
                 all_k = set()
                 for vv in dd:
                     all_k.update(flatten_dict_keys(vv, separator=separator,
-                                                   prefix=f"{prefix}{{int}}{separator}"))
+                                                   prefix=f"{prefix}[_]{separator}"))
                 return all_k
             else:
-                return set([f"{prefix}{str(type(dd))}"])
-        return set([f"{prefix}{str(type(dd))}"])
+                return set([f"{prefix}[{get_type_string(dd)}]"])
+        return set([f"{prefix}<{get_type_string(dd)}>"])
     else:
-        return set([f"{prefix}{str(type(dd))}"])
+        return set([f"{prefix}<{get_type_string(dd)}>"])
+
+
+def get_complex_key_recursive(dd: Dict, key: List[str], sep: str = ".", sit: str = "[_]") -> Dict:
+    """ Get 1 complex key recursive """
+
+    if len(key) < 1:
+        return dd
+
+    if key[0] == sit:
+        if isinstance(dd, dict):
+            res = {}
+            for kk, vv in dd.items():
+                res[kk] = get_complex_key_recursive(vv, key[1:], sep=sep, sit=sit)
+            return res
+        else:
+            res = {}
+            for kk, vv in enumerate(dd):
+                res[kk] = get_complex_key_recursive(vv, key[1:], sep=sep, sit=sit)
+            return res
+
+    kk = key[0]
+
+    while kk not in dd and key[0] != sit:
+        key = key[1:]
+        if len(key) > 0:
+            kk += sep + key[0]
+        else:
+            break
+
+    if kk not in dd:
+        return None
+
+    return {kk: get_complex_key_recursive(dd[kk], key[1:], sep=sep, sit=sit)}
+
+
+def rem_complex_key_recursive(dd: Dict, key: List[str], sep: str = ".", sit: str = "[_]"):
+    """ Inplace Remove recursive complex key """
+
+    if key[0] == sit:
+        if isinstance(dd, dict):
+            for kk, vv in dd.items():
+                rem_complex_key_recursive(vv, key[1:], sep=sep, sit=sit)
+        else:
+            for kk, vv in enumerate(dd):
+                rem_complex_key_recursive(vv, key[1:], sep=sep, sit=sit)
+
+    kk = key[0]
+
+    while kk not in dd and key[0] != sit:
+        key = key[1:]
+        if len(key) > 0:
+            kk += sep + key[0]
+        else:
+            break
+
+    if kk not in dd:
+        return
+
+    if len(key) > 1:
+        rem_complex_key_recursive(dd[kk], key[1:], sep=sep, sit=sit)
+    else:
+        dd.pop(kk)
+
+
+def multi_index_df_to_dict(df, level=0) -> Dict:
+    if level > 1:
+        d = {}
+        it = df.index.levels[0] if hasattr(df.index, "levels") else df.index
+        for idx in it:
+            d[idx] = multi_index_df_to_dict(df.loc[idx], level=level-1)
+        return d
+    elif isinstance(df, pd.DataFrame):
+        d = {}
+        for idx, df_select in df.groupby(level=[0]):
+            d[idx] = df_select[0][0]
+        return d
+    else:
+        return df[0]
+
+
+def exclude_dict_complex_keys(data: Dict, exclude_keys: List[str],
+                              separator: str =".", siterator: str ="[_]") -> Dict:
+    """ Returns new dictionary without the specified complex keys """
+
+    data = deepcopy(data)
+    for key in exclude_keys:
+        key = key.split(".")
+
+        if key[-1].startswith("<") and key[-1].endswith(">"):
+            key = key[:-1]
+
+        rem_complex_key_recursive(data, key, sep=separator, sit=siterator)
+    return data
+
+
+def include_dict_complex_keys(data: Dict, include_keys: List[str],
+                              smart_group: Union[int, List[int]] = 0,
+                              separator: str =".", siterator: str ="[_]"):
+    """ get only included keys from dictionary. """
+
+    ret = {}
+
+    smart_groups = smart_group
+    if isinstance(smart_groups, list):
+        assert len(smart_groups) == len(include_keys), "Len of smart_group must equal include_keys"
+    else:
+        smart_groups = [smart_group] * len(include_keys)
+
+    for orig_key, smart_group in zip(include_keys, smart_groups):
+        key = orig_key.split(".")
+
+        if key[-1].startswith("<") and key[-1].endswith(">"):
+            key = key[:-1]
+
+        key_data = get_complex_key_recursive(data, key, sep=separator, sit=siterator)
+
+        if smart_group > 0:
+            flat_data = flatten_dict(key_data)
+
+            if np.any(flat_data.values()):
+                continue
+
+            df = pd.DataFrame([x.split(separator) for x in flat_data.keys()])
+            max_cl = df.columns.max()
+            df["values"] = flat_data.values()
+
+            df["common"] = ""
+            common = []
+            variable = []
+            for i in range(max_cl+1):
+                if len(df[i].unique()) == 1:
+                    df["common"] += df[i] + separator
+                    common.append(i)
+                else:
+                    variable.append(i)
+            df = df.drop(common, axis=1)
+
+            for col in df.columns:
+                if is_numeric(df.loc[0, col]) and col != "values":
+                    df.loc[:, col] = df[col].apply(lambda x: int(float(x)))
+
+            # Merge common columns
+            index_col = [df["common"].values] + [df[x].values for x in variable]
+            index = pd.MultiIndex.from_arrays(index_col, names=range(len(index_col)))
+            df_index = pd.DataFrame(df["values"].values, index=index)
+
+            group = 0
+            index_level = len(index.levels) - 2
+
+            while group < smart_group and index_level >= 0:
+                index_tuple = []
+                values = []
+                for date, new_df in df_index.groupby(level=index_level):
+                    values.append(new_df[0].values)
+                    index_tuple.append(new_df.index.values[0][:-1])
+                index = pd.MultiIndex.from_tuples(index_tuple)
+                df_index = pd.DataFrame([0] * len(values), index=index)
+                df_index.loc[:, 0] = pd.Series(values).values
+                group += 1
+                index_level -= 1
+
+            key_data = multi_index_df_to_dict(df_index, len(df_index.index.levels))
+
+        ret[orig_key] = key_data
+
+    return ret
+
 
 def mark_uploaded_name(file_path):
     dir_ = os.path.dirname(file_path)
@@ -210,7 +396,7 @@ def get_all_hits():
     return all_hits
 
 
-def get_hits_dsl_query(query: Dict, other: Dict = None,
+def get_hits_dsl_query(query: Dict, other: Dict = None, ids: List[str] = list(),
                        include_keys: List[str] = list(), exclude_keys: List[str] = list(),
                        df_format=False) -> List[Dict]:
     """
@@ -236,6 +422,8 @@ def get_hits_dsl_query(query: Dict, other: Dict = None,
         'query': query
     }
 
+    if len(ids) > 0:
+        query["ids"] = {"values": ids}
     if len(include_keys) > 0:
         doc["_source"]["includes"] = include_keys
     if len(exclude_keys) > 0:
@@ -265,7 +453,7 @@ def get_hits_dsl_query(query: Dict, other: Dict = None,
     return all_hits
 
 
-def get_hits_dict_query(query: Dict,
+def get_hits_dict_query(query: Dict, ids: List[str] = list(),
                         include_keys: List[str] = list(), exclude_keys: List[str] = list(),
                         df_format=False) -> List[Dict]:
     """
@@ -289,7 +477,8 @@ def get_hits_dict_query(query: Dict,
     for k, v in query.items():
         for term in v:
             must_list.append({"term": {k: term}})
-    res = get_hits_dsl_query(dsl_query, include_keys=include_keys, exclude_keys=exclude_keys,
+    res = get_hits_dsl_query(dsl_query, ids=ids,
+                             include_keys=include_keys, exclude_keys=exclude_keys,
                              df_format=df_format)
     return res
 
@@ -335,17 +524,76 @@ def update_fields_select_df(df: Union[pd.DataFrame, Any], new_fields: List[str],
     return new_df, select_keys_col
 
 
+def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(),
+                       dir_regex_any: List[str] = list(), dir_regex_all: List[str] = list(),
+                       include_keys: List[str] = list(), smart_group: Union[int, List[int]] = 0,
+                       exclude_keys: List[str] = list(), no_proc: int = 1):
+
+    from utils.key_defines import REMOTE_HOST, SERVER_RESULTS, SERVER_eFOLDER, \
+        SERVER_GET_REPORT_SCRIPT, SERVER_PYTHON
+    import subprocess
+    import torch
+    from argparse import Namespace
+    import time
+    from utils.pid_wait import wait_pid
+
+    report = {}
+
+    report_name = f"report_{int(time.time())}.pkl"
+    server_path = os.path.join(SERVER_eFOLDER, report_name)
+
+    args = Namespace()
+    args.results_path = SERVER_RESULTS
+    args.e_ids = e_ids
+    args.experiments = experiments
+    args.dir_regex_any = dir_regex_any
+    args.dir_regex_all = dir_regex_all
+    args.include_keys = include_keys
+    args.smart_group = smart_group
+    args.exclude_keys = exclude_keys
+    args.no_procs = no_proc
+
+    args.save_path = server_path
+
+    local_args_file = "results/args.pkl"
+    local_report = "results/report.pkl"
+
+    torch.save(args, local_args_file)
+
+    # -- Send arguments by file
+    p = subprocess.Popen(["scp", local_args_file, f"{REMOTE_HOST}:{server_path}"])
+    sts = wait_pid(p.pid, timeout=600)
+
+    # -- Run script
+    p = subprocess.Popen( f"ssh {REMOTE_HOST} {SERVER_PYTHON} {SERVER_GET_REPORT_SCRIPT} "
+                          f"--args-path {server_path}", shell=True)
+    sts = wait_pid(p.pid, timeout=120)
+
+    # -- Receive response back
+    p = subprocess.Popen(["scp", f"{REMOTE_HOST}:{server_path}", local_report],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    sts = wait_pid(p.pid, timeout=120)
+
+    if os.path.isfile(local_report):
+        report = torch.load(local_report)
+
+    return report
+
+
 if __name__ == "__main__":
 
-    get_hits_dsl_query(
-        {
-            "match": {
-                "args.title": {
-                    "query": "andrei",
-                    "type": "phrase"
-                }
-            }
-        }
-    )
+    # get_hits_dsl_query(
+    #     {
+    #         "match": {
+    #             "args.title": {
+    #                 "query": "andrei",
+    #                 "type": "phrase"
+    #             }
+    #         }
+    #     }
+    # )
+    #
+    # get_hits_dict_query({"_id": ["F1s272MBm5wd3rDHf_es"]})
 
-    get_hits_dict_query({"_id": ["F1s272MBm5wd3rDHf_es"]})
+    d = get_server_reports(["F1s272MBm5wd3rDHf_es"])
+    print(d)
