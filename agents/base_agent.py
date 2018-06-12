@@ -206,16 +206,16 @@ class BaseAgent(object):
 
         report.save(final=True)
 
+    # TODO: move the following two in reporting!!!
     def batch_update_auxiliary_losses(self, info: dict) -> None:
         for key, value in info.items():
-            if key.startswith("loss_"):
-                meter = self._batch_aux_losses.setdefault(key, AverageMeter())
-                meter.update(value)
+            meter = self._batch_aux_losses.setdefault(key, AverageMeter())
+            meter.update(value)
 
     def batch_print_aux_losses(self) -> None:
         table = []
         for key, meter in self._batch_aux_losses.items():
-            table.append([key[5:], meter.val, meter.avg])
+            table.append([key, meter.val, meter.avg])
         print(tabulate(table, headers=["Loss", "Crt.", "Avg."]))
 
     def _train_epoch(self, task_idx: int, train_loader: Union[TaskDataLoader, Iterator[Batch]],

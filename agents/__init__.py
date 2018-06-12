@@ -10,6 +10,7 @@ ALL_AGENTS = {
     "full_approx": ("full_approx", "FullApprox"),
     "seq_laplace": ("sequential_laplace_approximation", "SequentialLaplaceApproximation"),
     "andrei_test": ("andrei_test", "AndreiTest"),
+    "sparse_kf": ("sparse_laplace_kfc", "SparseKFLaplace")
 }
 
 

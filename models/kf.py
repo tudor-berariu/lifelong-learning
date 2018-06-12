@@ -93,12 +93,14 @@ class KroneckerFactored(nn.Module):
     def __init__(self,
                  do_checks: bool=False,
                  use_fisher: bool=True,
+                 use_exact: bool=False,
                  verbose: bool=False,
                  average_factors: bool=True) -> None:
         super(KroneckerFactored, self).__init__()
         self.__my_handles = []
         self.__kf_mode = False  # One must activate this
         self.__use_fisher = use_fisher
+        self.__use_exact = use_exact
         self.__do_checks = do_checks
         self.__verbose = verbose
         self.__average_factors = average_factors
@@ -136,7 +138,6 @@ class KroneckerFactored(nn.Module):
 
     def __soft_reset_state(self):
         """This should be called before each batch"""
-        print("SOFT_RESET")
         self.__df_dx.clear()
         self.__d2f_dx2.clear()
         self.__prev_layer = None
@@ -146,7 +147,7 @@ class KroneckerFactored(nn.Module):
         self.__last_linear = -1
         self.__conv_special_inputs.clear()
         self.__next_parametric = None  # type: Optional[Module]
-        self.__maybe_exact = True
+        self.__maybe_exact = self.__use_exact
         self.__last_hessian = None
         self.__next_outputs_hessian = None
 
@@ -303,7 +304,7 @@ class KroneckerFactored(nn.Module):
     def __kf_fwd_hook(self, _module, _inputs, _output):
         self.__phase = self.BACKWARD
         self.__layer_idx -= 1
-        self.__maybe_exact = True
+        self.__maybe_exact = self.__use_exact
         self.__prev_layer = None
 
     # Hooks for linear layers
