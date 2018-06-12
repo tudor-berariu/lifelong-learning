@@ -150,7 +150,6 @@ def multi_index_df_to_dict(df, level=0) -> Dict:
         return d
     elif isinstance(df, pd.DataFrame):
         d = {}
-        print(df)
         for idx, df_select in df.groupby(level=[0]):
             d[idx] = df_select[0][0]
         return d
@@ -591,7 +590,7 @@ def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(
 
 
 if __name__ == "__main__":
-
+    pass
     # get_hits_dsl_query(
     #     {
     #         "match": {
@@ -605,5 +604,5 @@ if __name__ == "__main__":
     #
     # get_hits_dict_query({"_id": ["F1s272MBm5wd3rDHf_es"]})
 
-    d = get_server_reports(["F1s272MBm5wd3rDHf_es"])
-    print(d)
+    # d = get_server_reports(["F1s272MBm5wd3rDHf_es"])
+    # print(d)
