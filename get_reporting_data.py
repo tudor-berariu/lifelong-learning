@@ -42,11 +42,11 @@ def read_report(file_path: str,
 
     # -- Filter keys
     if len(exclude_keys) > 0:
-        data["info"]["exclude_keys"] = True
+        report["info"]["exclude_keys"] = True
         data = exclude_dict_complex_keys(data, exclude_keys=exclude_keys,
                                          separator=KEY_SEPARATOR, siterator=KEY_SITERATOR)
     if len(include_keys) > 0:
-        data["info"]["include_keys"] = True
+        report["info"]["include_keys"] = True
         data = include_dict_complex_keys(data, include_keys=include_keys, smart_group=smart_group,
                                          separator=KEY_SEPARATOR, siterator=KEY_SITERATOR)
 
