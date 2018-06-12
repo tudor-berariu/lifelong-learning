@@ -142,7 +142,7 @@ def rem_complex_key_recursive(dd: Dict, key: List[str], sep: str = ".", sit: str
 
 
 def multi_index_df_to_dict(df, level=0) -> Dict:
-    if level > 1:
+    if level > 0:
         d = {}
         it = df.index.levels[0] if hasattr(df.index, "levels") else df.index
         for idx in it:
@@ -150,6 +150,7 @@ def multi_index_df_to_dict(df, level=0) -> Dict:
         return d
     elif isinstance(df, pd.DataFrame):
         d = {}
+        print(df)
         for idx, df_select in df.groupby(level=[0]):
             d[idx] = df_select[0][0]
         return d
@@ -238,7 +239,8 @@ def include_dict_complex_keys(data: Dict, include_keys: List[str],
                 group += 1
                 index_level -= 1
 
-            key_data = multi_index_df_to_dict(df_index, len(df_index.index.levels))
+            l = 0 if len(df_index.index.levels) else len(df_index.index.levels)
+            key_data = multi_index_df_to_dict(df_index, l)
 
         ret[orig_key] = key_data
 
@@ -495,7 +497,7 @@ def get_data_as_dataframe():
 
 
 def update_fields_select_df(df: Union[pd.DataFrame, Any], new_fields: List[str],
-                            update_file: str = None) -> Tuple[pd.DataFrame, List]:
+                            update_file: str = None) -> Tuple[pd.DataFrame, List[str], List[int]]:
 
     if update_file is not None and os.path.isfile(update_file):
         df = pd.read_csv(update_file)
@@ -507,6 +509,7 @@ def update_fields_select_df(df: Union[pd.DataFrame, Any], new_fields: List[str],
     all_fields = sorted(list(set(all_fields)))
     new_df = pd.DataFrame(all_fields, columns=["key"])
     new_df["select"] = 0
+    new_df["smart_group"] = 1
     if df is not None:
         old_keys = df["key"].values.tolist()
         for idx in new_df.index:
@@ -515,14 +518,16 @@ def update_fields_select_df(df: Union[pd.DataFrame, Any], new_fields: List[str],
                 idx2 = old_keys.index(key)
                 new_df.set_value(idx, "select", df.loc[idx2, "select"])
 
-    new_df = new_df[["select", "key"]]
+    new_df = new_df[["select", "smart_group", "key"]]
 
     if update_file is not None:
         new_df.to_csv(update_file)
 
-    select_keys_col = new_df[new_df["select"] == 1]["key"].values.tolist()
+    selected = new_df[new_df["select"] == 1]
+    select_keys_col = selected["key"].values.tolist()
+    select_smart_group_col = selected["smart_group"].values.tolist()
 
-    return new_df, select_keys_col
+    return new_df, select_keys_col, select_smart_group_col
 
 
 def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(),
