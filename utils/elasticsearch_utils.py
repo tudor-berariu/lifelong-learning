@@ -4,6 +4,7 @@ import pandas as pd
 from typing import List, Dict, Callable, Any, Union, Tuple
 from copy import deepcopy
 import numpy as np
+import re
 
 pd.set_option('display.max_rows', 500)
 pd.set_option('display.max_columns', 500)
@@ -187,7 +188,7 @@ def include_dict_complex_keys(data: Dict, include_keys: List[str],
     for orig_key, smart_group in zip(include_keys, smart_groups):
         key = orig_key.split(".")
 
-        if key[-1].startswith("<") and key[-1].endswith(">"):
+        if re.match("\[.*\]", key[-1]) or re.match("<.*>", key[-1]):
             key = key[:-1]
 
         key_data = get_complex_key_recursive(data, key, sep=separator, sit=siterator)
@@ -561,15 +562,18 @@ def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(
     torch.save(args, local_args_file)
 
     # -- Send arguments by file
+    print("Send arguments ...")
     p = subprocess.Popen(["scp", local_args_file, f"{REMOTE_HOST}:{server_path}"])
     sts = wait_pid(p.pid, timeout=600)
 
     # -- Run script
+    print("Run remote script ...")
     p = subprocess.Popen( f"ssh {REMOTE_HOST} {SERVER_PYTHON} {SERVER_GET_REPORT_SCRIPT} "
                           f"--args-path {server_path}", shell=True)
     sts = wait_pid(p.pid, timeout=120)
 
     # -- Receive response back
+    print("Receive response data ...")
     p = subprocess.Popen(["scp", f"{REMOTE_HOST}:{server_path}", local_report],
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     sts = wait_pid(p.pid, timeout=120)
