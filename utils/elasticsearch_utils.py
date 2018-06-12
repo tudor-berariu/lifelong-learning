@@ -533,7 +533,7 @@ def update_fields_select_df(df: Union[pd.DataFrame, Any], new_fields: List[str],
 def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(),
                        dir_regex_any: List[str] = list(), dir_regex_all: List[str] = list(),
                        include_keys: List[str] = list(), smart_group: Union[int, List[int]] = 0,
-                       exclude_keys: List[str] = list(), no_proc: int = 1):
+                       exclude_keys: List[str] = list(), no_proc: int = 1, df_format=True):
 
     from utils.key_defines import REMOTE_HOST, SERVER_RESULTS, SERVER_eFOLDER, \
         SERVER_GET_REPORT_SCRIPT, SERVER_PYTHON
@@ -543,7 +543,8 @@ def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(
     import time
     from utils.pid_wait import wait_pid
 
-    report = {}
+    full_report = {}
+    df =  None
 
     report_name = f"report_{int(time.time())}.pkl"
     server_path = os.path.join(SERVER_eFOLDER, report_name)
@@ -562,7 +563,7 @@ def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(
     args.save_path = server_path
 
     local_args_file = "results/args.pkl"
-    local_report = "results/report.pkl"
+    local_report = "results/full_report.pkl"
 
     torch.save(args, local_args_file)
 
@@ -584,9 +585,9 @@ def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(
     sts = wait_pid(p.pid, timeout=120)
 
     if os.path.isfile(local_report):
-        report = torch.load(local_report)
+        full_report = torch.load(local_report)
 
-    return report
+    return full_report, df
 
 
 if __name__ == "__main__":
