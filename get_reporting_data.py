@@ -166,10 +166,11 @@ if __name__ == "__main__":
     if args.args_path is not None:
         args = torch.load(args.args_path)
 
-    if len(args.smart_group) == 1:
-        args.smart_group = args.smart_group[0]
-    elif len(args.smart_group) == 0:
-        args.smart_group = 1
+    if isinstance(args.smart_group, list):
+        if len(args.smart_group) == 1:
+            args.smart_group = args.smart_group[0]
+        elif len(args.smart_group) == 0:
+            args.smart_group = 1
 
     result = get_reports(args.results_path, e_ids=args.e_ids, experiments=args.experiments,
                          dir_regex_any=args.dir_regex_any, dir_regex_all=args.dir_regex_all,
