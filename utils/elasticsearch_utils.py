@@ -16,6 +16,48 @@ eINDEX = "phd"
 eDOC = "lifelong"
 
 
+def flatten_dict(dd, separator='.', prefix=''):
+    if isinstance(dd, dict):
+        new_d = {
+            prefix + separator + str(k) if prefix else str(k): v
+            for kk, vv in dd.items() for k, v in flatten_dict(vv, separator, str(kk)).items()
+        }
+    else:
+        new_d = {prefix: dd}
+    return new_d
+
+
+def is_numeric(vv):
+    try:
+        a = float(vv)
+    except ValueError:
+        return False
+    return True
+
+
+def flatten_dict_keys(dd, separator='.', prefix=''):
+    """ Transform complex data recursive to unique keys """
+    if isinstance(dd, dict):
+        all_k = set()
+        for kk, vv in dd.items():
+            k_name = "{int}" if is_numeric(kk) else kk
+            all_k.update(flatten_dict_keys(vv, separator=separator,
+                                           prefix=f"{prefix}{k_name}{separator}"))
+        return all_k
+    elif isinstance(dd, list):
+        if len(dd) > 0:
+            if isinstance(dd[0], dict):
+                all_k = set()
+                for vv in dd:
+                    all_k.update(flatten_dict_keys(vv, separator=separator,
+                                                   prefix=f"{prefix}{{int}}{separator}"))
+                return all_k
+            else:
+                return set([f"{prefix}{str(type(dd))}"])
+        return set([f"{prefix}{str(type(dd))}"])
+    else:
+        return set([f"{prefix}{str(type(dd))}"])
+
 def mark_uploaded_name(file_path):
     dir_ = os.path.dirname(file_path)
     file_name_ = os.path.basename(file_path)
@@ -168,7 +210,9 @@ def get_all_hits():
     return all_hits
 
 
-def get_hits_dsl_query(query: Dict, other: Dict = None) -> List[Dict]:
+def get_hits_dsl_query(query: Dict, other: Dict = None,
+                       include_keys: List[str] = list(), exclude_keys: List[str] = list(),
+                       df_format=False) -> List[Dict]:
     """
         Can be used with queries of format: Query DSL | Elasticsearch
         Example:
@@ -187,9 +231,16 @@ def get_hits_dsl_query(query: Dict, other: Dict = None) -> List[Dict]:
     walk_and_delete_key(query, ["type"])
 
     doc = {
+        "_source": {},
         'size': 1000,
         'query': query
     }
+
+    if len(include_keys) > 0:
+        doc["_source"]["includes"] = include_keys
+    if len(exclude_keys) > 0:
+        doc["_source"]["excludes"] = exclude_keys
+
     if other is not None:
         doc.update(other)
 
@@ -206,10 +257,17 @@ def get_hits_dsl_query(query: Dict, other: Dict = None) -> List[Dict]:
 
         scroll = res['_scroll_id']
         res = es.scroll(scroll_id=scroll, scroll='1m')
+
+    if df_format:
+        flat_data = [flatten_dict(x) for x in all_hits]
+        all_hits = pd.DataFrame(flat_data)
+
     return all_hits
 
 
-def get_hits_dict_query(query: Dict) -> List[Dict]:
+def get_hits_dict_query(query: Dict,
+                        include_keys: List[str] = list(), exclude_keys: List[str] = list(),
+                        df_format=False) -> List[Dict]:
     """
         Can be used with queries of format:
         Dictionary with keys representing the field in database and value list of filter terms.
@@ -223,15 +281,17 @@ def get_hits_dict_query(query: Dict) -> List[Dict]:
     """
     must_list = []
     dsl_query = {
-         "bool" : {
-            "must" : must_list
-        }
+         "bool": {
+            "must": must_list
+         }
     }
 
     for k, v in query.items():
         for term in v:
             must_list.append({"term": {k: term}})
-    return get_hits_dsl_query(dsl_query)
+    res = get_hits_dsl_query(dsl_query, include_keys=include_keys, exclude_keys=exclude_keys,
+                             df_format=df_format)
+    return res
 
 
 def get_data_as_dataframe():
@@ -244,51 +304,8 @@ def get_data_as_dataframe():
     return df
 
 
-def flatten_dict(dd, separator='.', prefix=''):
-    if isinstance(dd, dict):
-        new_d = {
-            prefix + separator + str(k) if prefix else str(k): v
-            for kk, vv in dd.items() for k, v in flatten_dict(vv, separator, str(kk)).items()
-        }
-    else:
-        new_d = {prefix: dd}
-    return new_d
-
-
-def is_numeric(vv):
-    try:
-        a = float(vv)
-    except ValueError:
-        return False
-    return True
-
-
-def flatten_dict_keys(dd, separator='.', prefix=''):
-    """ Transform complex data recursive to unique keys """
-    if isinstance(dd, dict):
-        all_k = set()
-        for kk, vv in dd.items():
-            k_name = "{int}" if is_numeric(kk) else kk
-            all_k.update(flatten_dict_keys(vv, separator=separator,
-                                           prefix=f"{prefix}{k_name}{separator}"))
-        return all_k
-    elif isinstance(dd, list):
-        if len(dd) > 0:
-            if isinstance(dd[0], dict):
-                all_k = set()
-                for vv in dd:
-                    all_k.update(flatten_dict_keys(vv, separator=separator,
-                                                   prefix=f"{prefix}{{int}}{separator}"))
-                return all_k
-            else:
-                return set([f"{prefix}{str(type(dd))}"])
-        return set([f"{prefix}{str(type(dd))}"])
-    else:
-        return set([f"{prefix}{str(type(dd))}"])
-
-
 def update_fields_select_df(df: Union[pd.DataFrame, Any], new_fields: List[str],
-                            update_file: str = None) -> Tuple(pd.DataFrame, List):
+                            update_file: str = None) -> Tuple[pd.DataFrame, List]:
 
     if update_file is not None and os.path.isfile(update_file):
         df = pd.read_csv(update_file)
