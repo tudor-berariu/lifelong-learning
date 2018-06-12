@@ -238,7 +238,7 @@ def include_dict_complex_keys(data: Dict, include_keys: List[str],
                 group += 1
                 index_level -= 1
 
-            l = 0 if len(df_index.index.levels) else len(df_index.index.levels)
+            l = 0 if len(df_index.index.levels) == 1 else len(df_index.index.levels)
             key_data = multi_index_df_to_dict(df_index, l)
 
         ret[orig_key] = key_data
@@ -532,7 +532,7 @@ def update_fields_select_df(df: Union[pd.DataFrame, Any], new_fields: List[str],
 def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(),
                        dir_regex_any: List[str] = list(), dir_regex_all: List[str] = list(),
                        include_keys: List[str] = list(), smart_group: Union[int, List[int]] = 0,
-                       exclude_keys: List[str] = list(), no_proc: int = 1, df_format=True):
+                       exclude_keys: List[str] = list(), no_proc: int = 1, df_format=False):
 
     from utils.key_defines import REMOTE_HOST, SERVER_RESULTS, SERVER_eFOLDER, \
         SERVER_GET_REPORT_SCRIPT, SERVER_PYTHON
@@ -585,6 +585,21 @@ def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(
 
     if os.path.isfile(local_report):
         full_report = torch.load(local_report)
+
+        if df_format:
+            report = full_report[0]
+            infos = [x["info"] for x in report]
+            datas = [x["data"] for x in report]
+            new_data = []
+
+            for ix, data in enumerate(datas):
+                new_d = {}
+                infos[ix]["complex_key"] = []
+                for k, v in data.items():
+                    if v is not None:
+                        infos[ix]["complex_key"].append(k)
+                        new_d.update(v)
+                new_data.append(flatten_dict(new_d))
 
     return full_report, df
 

@@ -21,8 +21,13 @@ def read_report(file_path: str,
     if isinstance(file_path, tuple):
         file_path, include_keys, smart_group, exclude_keys = file_path
 
-    report = {"__file_path": file_path}
-    data = None
+    report = {"info": {
+        "__file_path": file_path,
+        "include_keys": False,
+        "exclude_keys": False,
+
+    }}
+    report["data"] = data = None
 
     # -- Try to read report
     try:
@@ -37,13 +42,15 @@ def read_report(file_path: str,
 
     # -- Filter keys
     if len(exclude_keys) > 0:
+        report["info"]["exclude_keys"] = True
         data = exclude_dict_complex_keys(data, exclude_keys=exclude_keys,
                                          separator=KEY_SEPARATOR, siterator=KEY_SITERATOR)
     if len(include_keys) > 0:
+        report["info"]["include_keys"] = True
         data = include_dict_complex_keys(data, include_keys=include_keys, smart_group=smart_group,
                                          separator=KEY_SEPARATOR, siterator=KEY_SITERATOR)
 
-    report.update(data)
+    report["data"] = data
 
     return report
 
