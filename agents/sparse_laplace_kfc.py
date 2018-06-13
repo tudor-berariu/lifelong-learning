@@ -1,4 +1,6 @@
 from typing import Dict, Iterator, List, Tuple, Union
+
+import torch
 import torch.nn.functional as functional
 from torch import Tensor
 
@@ -23,18 +25,20 @@ class GaussianPrior(Prior):
                  diag_adjust: float = 0.) -> None:
         self.mode = {name: param.clone().detach_() for (name, param) in mode}
         self.kfhp = kfhp
-        self.diag_adjust = 0.
+        self.diag_adjust = diag_adjust
 
     def __call__(self, vector: Iterator[Tuple[str, Tensor]]) -> Tensor:
-        diff2 = dict({})
-        a, count_no = None, 0
+        all_diffs = dict({})
+        diag_loss = None
         for name, values in vector:
-            diff = values - self.mode[name]
-            diff2[name] = diff * diff
-            a = diff2[name].sum() if a is None else (a + diff2[name].sum())
-            count_no += values.nelement()
-        a /= count_no
-        return self.kfhp.hessian_product_loss(diff2) + self.diag_adjust * a
+            all_diffs[name] = diff = values - self.mode[name]
+            if self.diag_adjust > 0:
+                diag_extra = torch.dot(diff.view(-1), diff.view(-1))
+                diag_loss = diag_extra if diag_extra is None else (diag_loss + diag_extra)
+        vHv = self.kfhp.hessian_product_loss(all_diffs)
+        if self.diag_adjust > 0:
+            return vHv + self.diag_adjust * diag_loss
+        return vHv
 
 
 class SparsityPrior(Prior):
@@ -45,15 +49,8 @@ class SparsityPrior(Prior):
 
     def __call__(self, vector: Iterator[Tuple[str, Tensor]]) -> Tensor:
         loss = None
-        count = 0
-        for _, values in vector:
-            if self.p == 1:
-                new_loss = values.abs().sum()
-            else:
-                new_loss = values.abs().pow(self.p).sum()
-            count += values.nelement()
-            loss = new_loss if loss is None else (loss + new_loss)
-        return loss / count
+        all_p = torch.cat([values.view(-1) for (_, values) in vector], dim=0)
+        return torch.norm(all_p, p=self.p)
 
 
 class SparseKFLaplace(BaseAgent):
@@ -67,9 +64,11 @@ class SparseKFLaplace(BaseAgent):
         self.merge_elasticities = agent_args.merge_elasticities  # TODO: not used yet
         self.nll_scale = agent_args.nll_scale
         self.sparsity_p_norm: float = agent_args.sparsity_p_norm
-        self.laplace_scale: float = agent_args.laplace_scale
+        self.prior_scale: float = agent_args.prior_scale
         self.sparsity_scale: float = agent_args.sparsity_scale
         self.diag_adjust: float = agent_args.diag_adjust  # (H + λI)
+        self.use_exact: bool = agent_args.use_exact
+        self.clamp_vector: bool = agent_args.clamp_vector
 
         self.saved_tasks_no = 0
         self.priors: Dict[str, Prior] = []
@@ -86,27 +85,34 @@ class SparseKFLaplace(BaseAgent):
         task_no = self.crt_task_idx
 
         losses = dict({})
-        loss = outputs[0].new_zeros(1)
+        nll_loss = outputs[0].new_zeros(1)
         for out, target in zip(outputs, targets):
-            loss += functional.cross_entropy(out, target)
-        loss *= self.nll_scale
+            nll_loss += functional.cross_entropy(out, target)
 
-        sparsity_loss = loss.new_zeros(1)
+        sparsity_loss = nll_loss.new_zeros(1)
         if self.sparsity_scale > 0:
-            sparsity_loss += self.sparsity_scale * self.sparsity_prior(model.named_parameters())
+            sparsity_loss += self.sparsity_prior(model.named_parameters())
 
-        prior_loss = loss.new_zeros(1)
+        prior_loss = nll_loss.new_zeros(1)
         if task_no > 0:
             for _idx, prior in enumerate(self.priors):
-                prior_loss += self.laplace_scale * prior(model.named_parameters())
+                prior_loss += prior(model.named_parameters())
+        loss = self.prior_scale * prior_loss +\
+            self.sparsity_scale * sparsity_loss +\
+            self.nll_scale * nll_loss
+        loss /= self.nll_scale   # This is not to search for new hyperparameter values
+
         losses = {
-            "sparsity p-norm": sparsity_loss.item(),
-            "Gaussian prior": prior_loss.item()
+            "nll loss (raw)": nll_loss.item(),
+            "sparsity p-norm (raw)": sparsity_loss.item(),
+            "Gaussian prior (raw)": prior_loss.item(),
+            "nll loss (scaled)": nll_loss.item() * self.nll_scale,
+            "sparsity p-norm (scaled)": sparsity_loss.item() * self.sparsity_scale,
+            "Gaussian prior (scaled)": prior_loss.item() * self.prior_scale,
+            "FINAL LOSS:": loss.item()
         }
-        loss += prior_loss + sparsity_loss
         loss.backward()
         self._optimizer.step()
-
         return outputs, loss, losses
 
     def _end_train_task(self):
@@ -114,6 +120,7 @@ class SparseKFLaplace(BaseAgent):
         assert hasattr(train_loader, "__len__")
         self._optimizer.zero_grad()
         model = self._model
+        model.use_exact = False
         model.do_kf = True
         for _batch_idx, (data, targets, head_idx) in enumerate(train_loader):
             model.zero_grad()

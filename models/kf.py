@@ -63,10 +63,12 @@ class KFHessianProduct(object):
         weight, bias = weight.view(out_no, -1), bias.view(out_no, 1)
         params = torch.cat([weight, bias], dim=1)
         loss, prods_no = params.new_zeros(1), 0
-        for i_cov, o_hess in self.factors[module_name]:
-            loss += (o_hess @ params @ i_cov).clamp(min=0).sum()
-            prods_no += 1
-        loss /= prods_no
+        loss = torch.dot(
+            params.view(-1),
+            sum([(o_hess @ params @ i_cov) for (i_cov, o_hess) in self.factors[module_name]]).view(-1)
+        )
+        loss /= len(self.factors)
+
         return loss
 
     def hessian_product_loss(self, vector: Dict[str, Tensor]) -> None:
@@ -91,11 +93,11 @@ class KroneckerFactored(nn.Module):
     DONE = 3
 
     def __init__(self,
-                 do_checks: bool=False,
-                 use_fisher: bool=True,
-                 use_exact: bool=False,
-                 verbose: bool=False,
-                 average_factors: bool=True) -> None:
+                 do_checks: bool=False,  # Check gradients, and activate some asserts
+                 use_fisher: bool=True,  # Fallback to Fisher for unsupported architectures
+                 use_exact: bool=False,  # Use exact block Hessian when available
+                 verbose: bool=False,    # Print info
+                 average_factors: bool=True) -> None:  # Average factors E(H) = E(aaT) kf E(ggT)
         super(KroneckerFactored, self).__init__()
         self.__my_handles = []
         self.__kf_mode = False  # One must activate this
@@ -158,6 +160,14 @@ class KroneckerFactored(nn.Module):
     @average_factors.setter
     def average_factors(self, value: bool) -> None:
         self.__average_factors = value
+
+    @property
+    def use_exact(self) -> bool:
+        return self.__use_exact
+
+    @use_exact.setter
+    def use_exact(self, value: bool) -> None:
+        self.__use_exact = value
 
     @property
     def verbose(self) -> bool:

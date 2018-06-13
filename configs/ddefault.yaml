@@ -18,17 +18,19 @@ model:
   activation: &act "ReLU"
   _conv: [["Conv2d", -1, 20, 5], ["MaxPool2d", 2], [*act,],
           ["Conv2d", 20, 50, 5], ["MaxPool2d", 2], [*act,]]
-  hidden_units: [500]
+  hidden_units: [200, 200]
   use_softmax: no
 
 lifelong:
   mode: sparse_kf
 
-  sparsity_p_norm: .5
-  sparsity_scale: 10.
-  laplace_scale: 1000.
-  diag_adjust: 1.
+  sparsity_p_norm: 1
+  sparsity_scale: 0
+  prior_scale: 100000000.
+  diag_adjust: 0.
   nll_scale: 1.
+  use_exact: no
+  clamp_vector: yes
 
   merge_elasticities: False
   
@@ -36,7 +38,7 @@ lifelong:
 train:
   batch_size: 1000
   shuffle: True
-  epochs_per_task: 5
+  epochs_per_task: 20
   max_nan_loss: 5
   stop_if_not_better: 5
   early_stop: 10
