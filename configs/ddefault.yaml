@@ -4,7 +4,7 @@ mode: "seq"
 keep_alive: no
 
 tasks:
-  datasets: ["cifar10", "fashion", "mnist", "svhn"]
+  datasets: ["cifar10", "fashion", "mnist"]
   in_size: [3, 32, 32]
   reset_targets: False
   validation: 0
@@ -14,7 +14,7 @@ tasks:
   common_head: yes
 
 model:
-  name: kf_mlp
+  name: kf_lenet
   activation: &act "ReLU"
   _conv: [["Conv2d", -1, 20, 5], ["MaxPool2d", 2], [*act,],
           ["Conv2d", 20, 50, 5], ["MaxPool2d", 2], [*act,]]
