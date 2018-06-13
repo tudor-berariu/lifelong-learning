@@ -64,7 +64,7 @@ class KFHessianProduct(object):
         params = torch.cat([weight, bias], dim=1)
         loss, prods_no = params.new_zeros(1), 0
         for i_cov, o_hess in self.factors[module_name]:
-            loss += (o_hess @ params @ i_cov).sum()
+            loss += (o_hess @ params @ i_cov).clamp(min=0).sum()
             prods_no += 1
         loss /= prods_no
         return loss

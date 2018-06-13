@@ -1,4 +1,4 @@
-title: "DEFAULT"
+title: "KF"
 no_cuda: no
 mode: "seq"
 keep_alive: no
@@ -8,32 +8,29 @@ tasks:
   in_size: [3, 32, 32]
   reset_targets: False
   validation: 0
-  split: False
-  perms_no: no
+  split: 1
+  perms_no: 1
   permute_targets: no
   common_head: yes
 
 model:
-  name: mlp
+  name: kf_mlp
   activation: &act "ReLU"
   _conv: [["Conv2d", -1, 20, 5], ["MaxPool2d", 2], [*act,],
           ["Conv2d", 20, 50, 5], ["MaxPool2d", 2], [*act,]]
-  hidden_units: [100, 100]
+  hidden_units: [500]
   use_softmax: no
 
 lifelong:
-  mode: ewc
-  scale: 10.
-  merge_elasticities: False
-  first_task_only: False
+  mode: sparse_kf
 
-  alpha: 0.25
-  g_norm: 2
-  is_signed: False
-  drop_misclassified: False
-  loss_norm: 2
-  do_sample: False
-  signed_on_cpu: True
+  sparsity_p_norm: .5
+  sparsity_scale: 10.
+  laplace_scale: 1000.
+  diag_adjust: 1.
+  nll_scale: 1.
+
+  merge_elasticities: False
   
 
 train:
@@ -69,5 +66,5 @@ reporting:
   plot_comet: no
   comet_plot_freq_factor: 0.1
 
-  push_to_server: yes
-  generate_edata: yes
+  push_to_server: no
+  generate_edata: no
