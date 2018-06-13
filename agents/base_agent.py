@@ -8,6 +8,7 @@ from typing import Union, Callable, Any, List, Dict, Iterator, Tuple, Type
 import os
 import numpy as np
 from tabulate import tabulate
+from liftoff.config import value_of
 
 # Project imports
 from my_types import Args
@@ -33,6 +34,7 @@ class BaseAgent(object):
         self._args = args
         self.epochs_per_task = args.train.epochs_per_task
         self.max_nan_losses = args.train.max_nan_loss
+        self.early_stop = value_of(args.train, "early_stop", np.inf)
         self.multitask = multitask
         self.device = torch.device(args.device)
 
@@ -70,6 +72,7 @@ class BaseAgent(object):
         self.seen: int = 0
         self.all_epochs: int = 0
         self.all_eval_epochs: int = 0
+        self.all_eval_ind_epochs: int = 0
         self.crt_task_epoch: int = -1
         self.crt_task_idx: int = 0
         self.crt_data_loaders: Iterator[Tuple[TaskDataLoader, TaskDataLoader]] = None
@@ -116,6 +119,9 @@ class BaseAgent(object):
 
         # Loop over tasks
         for self.crt_task_idx, self.crt_data_loaders in enumerate(self.train_tasks):
+            early_stop_task = False
+            eval_no_improvement = 0
+
             train_task_idx, data_loaders = self.crt_task_idx, self.crt_data_loaders
 
             train_loader, val_loader = data_loaders
@@ -137,7 +143,8 @@ class BaseAgent(object):
                 # Get information to feed to reporting agent
                 train_info = {"acc": train_acc, "loss": train_loss}
                 train_info.update(info)
-                report.trace_train(self.seen, train_task_idx, crt_epoch, train_info)
+                report.trace_train(self.seen, train_task_idx, crt_epoch,
+                                   self.all_epochs, train_info)
 
                 # Evaluate
                 if crt_epoch % self.eval_freq == 0 or crt_epoch == (self.epochs_per_task - 1):
@@ -145,6 +152,7 @@ class BaseAgent(object):
 
                     # Validate on first 'how_many' tasks
                     how_many = self.no_tasks if self.eval_not_trained else train_task_idx + 1
+                    new_best_acc_cnt = new_best_loss_cnt = 0
                     for val_task_idx, val_loader in enumerate(multitask.test_tasks(how_many)):
                         val_loss, val_acc, info = self._eval_task(val_task_idx, val_loader,
                                                                   crt_epoch, eval_epoch)
@@ -155,7 +163,21 @@ class BaseAgent(object):
 
                         new_best_acc, new_best_loss = report.trace_eval(self.seen, val_task_idx,
                                                                         crt_epoch, eval_epoch,
+                                                                        self.all_eval_ind_epochs,
                                                                         val_info)
+                        new_best_acc_cnt += new_best_acc
+                        new_best_loss_cnt += new_best_loss
+
+                        # Early task stop
+                        if val_task_idx == train_task_idx:
+                            if new_best_acc + new_best_loss > 0:
+                                eval_no_improvement = 0
+                            else:
+                                eval_no_improvement += 1
+                                if eval_no_improvement > self.early_stop:
+                                    early_stop_task = True
+
+                        self.all_eval_ind_epochs += 1
 
                     self.crt_eval_epoch += 1
                     self.all_eval_epochs += 1
@@ -164,7 +186,9 @@ class BaseAgent(object):
                 if crt_epoch % self.save_report_freq == 0:
                     report.save()
 
-                if self.stop_training:
+                if self.stop_training or early_stop_task:
+                    print(f"[TRAIN] Early stop task. stop_training: {self.stop_training}"
+                          f" early_stop_task: {early_stop_task}")
                     break
 
                 self.all_epochs += 1
@@ -182,16 +206,16 @@ class BaseAgent(object):
 
         report.save(final=True)
 
+    # TODO: move the following two in reporting!!!
     def batch_update_auxiliary_losses(self, info: dict) -> None:
         for key, value in info.items():
-            if key.startswith("loss_"):
-                meter = self._batch_aux_losses.setdefault(key, AverageMeter())
-                meter.update(value)
+            meter = self._batch_aux_losses.setdefault(key, AverageMeter())
+            meter.update(value)
 
     def batch_print_aux_losses(self) -> None:
         table = []
         for key, meter in self._batch_aux_losses.items():
-            table.append([key[5:], meter.val, meter.avg])
+            table.append([key, meter.val, meter.avg])
         print(tabulate(table, headers=["Loss", "Crt.", "Avg."]))
 
     def _train_epoch(self, task_idx: int, train_loader: Union[TaskDataLoader, Iterator[Batch]],

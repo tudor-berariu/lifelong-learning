@@ -1,9 +1,17 @@
 from .mlp import MLP
 from .lenet import LeNet
+from .kf_mlp import KFMLP
 
 ALL_MODELS = {
     "mlp": MLP,
-    "lenet": LeNet
+    "lenet": LeNet,
+    "kf_mlp": KFMLP
+}
+
+ALL_MODELS_BASE_TYPE = {
+    "mlp": "mlp",
+    "lenet": "lenet",
+    "kf_mlp": "mlp"
 }
 
 

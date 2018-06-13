@@ -1,0 +1,11 @@
+dataset_name,model_base_type,base_score
+cifar10,lenet,0.7225
+cifar10,mlp,0.5338
+cifar100,lenet,0.384
+cifar100,mlp,0.2599
+fashion,lenet,0.9271
+fashion,mlp,0.8991
+mnist,lenet,0.995
+mnist,mlp,0.9855
+svhn,lenet,0.9154118008604795
+svhn,mlp,0.8476490473263676
