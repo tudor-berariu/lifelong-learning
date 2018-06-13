@@ -590,7 +590,7 @@ def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(
             report = full_report[0]
             infos = [x["info"] for x in report]
             datas = [x["data"] for x in report]
-            new_data = []
+            new_data = {}
 
             for ix, data in enumerate(datas):
                 new_d = {}
@@ -599,7 +599,9 @@ def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(
                     if v is not None:
                         infos[ix]["complex_key"].append(k)
                         new_d.update(v)
-                new_data.append(flatten_dict(new_d))
+                new_data[ix] = new_d
+
+            df = pd.DataFrame.from_dict(new_data)
 
     return full_report, df
 
