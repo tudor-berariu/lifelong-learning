@@ -6,8 +6,6 @@ from copy import deepcopy
 import numpy as np
 import re
 
-from pandas.core.ops import key
-
 pd.set_option('display.max_rows', 500)
 pd.set_option('display.max_columns', 500)
 pd.set_option('display.width', 1000)
