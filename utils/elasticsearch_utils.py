@@ -47,7 +47,7 @@ def is_numeric(vv):
         return False
     try:
         a = float(vv)
-    except ValueError:
+    except Exception as e:
         return False
     return True
 
