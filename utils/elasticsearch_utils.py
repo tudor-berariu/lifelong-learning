@@ -45,7 +45,7 @@ def is_numeric(vv):
         return False
     try:
         a = float(vv)
-    except ValueError:
+    except Exception as e:
         return False
     return True
 
@@ -399,6 +399,17 @@ def get_all_hits():
     return all_hits
 
 
+def format_complex_key_for_elastic(complex_key: str, sep: str = ".") -> str:
+    keys = complex_key.split(sep)
+    if re.match("\[.*\]", keys[-1]) or re.match("<.*>", keys[-1]):
+        keys = keys[:-1]
+
+    keys = sep.join(keys)
+
+    keys = re.sub("\[[^\]]*\].", "*", keys)
+    return keys
+
+
 def get_hits_dsl_query(query: Dict, other: Dict = None, ids: List[str] = list(),
                        include_keys: List[str] = list(), exclude_keys: List[str] = list(),
                        df_format=False) -> List[Dict]:
@@ -428,8 +439,10 @@ def get_hits_dsl_query(query: Dict, other: Dict = None, ids: List[str] = list(),
     if len(ids) > 0:
         query["ids"] = {"values": ids}
     if len(include_keys) > 0:
+        include_keys = [format_complex_key_for_elastic(x) for x in include_keys]
         doc["_source"]["includes"] = include_keys
     if len(exclude_keys) > 0:
+        exclude_keys = [format_complex_key_for_elastic(x) for x in exclude_keys]
         doc["_source"]["excludes"] = exclude_keys
 
     if other is not None:
@@ -585,13 +598,14 @@ def convert_report_to_df(report: Dict, sep=".", siterator: str = "[_]", unpack_l
     """
     infos = [x["info"] for x in report]
     datas = [x["data"] for x in report]
-    full_df = None
+
+    reports_df = []
 
     for ix, data in enumerate(datas):
-        new_d = {}
-        infos[ix]["complex_key"] = []
 
-        dataframes = []
+        infos[ix]["complex_key"] = []
+        full_df = None
+
         for k, v in data.items():
             if v is not None:
                 infos[ix]["complex_key"].append(k)
@@ -613,22 +627,37 @@ def convert_report_to_df(report: Dict, sep=".", siterator: str = "[_]", unpack_l
                     else:
                         key_df.columns = [common_key]
                 else:
-                    key_df = pd.DataFrame([variable_data], columns=[common_key])
+                    key_df = pd.DataFrame([0], columns=[common_key], dtype = np.object)
+                    key_df.loc[0, common_key] = variable_data
 
-                    # new_d = flatten_dict(variable_data)
                 key_df["_match_"] = 0
+
                 if full_df is None:
                     full_df = key_df
                 else:
-                    full_df = full_df.merge(key_df, how='left', on='_match_')
+                    common_col = list(set(key_df.columns) & set(full_df.columns))
+                    full_df = full_df.merge(key_df, how='left', on=common_col)
 
-    return full_df
+        if full_df is not None:
+            full_df = full_df.drop(["_match_"], axis=1)
+
+        full_df["reporting_idx"] = ix
+
+        reports_df.append(full_df)
+
+    if len(reports_df) > 0:
+        reports_df = pd.concat(reports_df, ignore_index=True)
+    else:
+        reports_df = None
+
+    return reports_df, infos
 
 
 def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(),
                        dir_regex_any: List[str] = list(), dir_regex_all: List[str] = list(),
                        include_keys: List[str] = list(), smart_group: Union[int, List[int]] = 0,
-                       exclude_keys: List[str] = list(), no_proc: int = 1, df_format=False):
+                       exclude_keys: List[str] = list(), no_proc: int = 1,
+                       df_format: bool = False):
 
     from utils.key_defines import REMOTE_HOST, SERVER_RESULTS, SERVER_eFOLDER, \
         SERVER_GET_REPORT_SCRIPT, SERVER_PYTHON
@@ -639,7 +668,7 @@ def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(
     from utils.pid_wait import wait_pid
 
     full_report = {}
-    df = None
+    df_return = None
 
     report_name = f"report_{int(time.time())}.pkl"
     server_path = os.path.join(SERVER_eFOLDER, report_name)
@@ -682,9 +711,11 @@ def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(
     if os.path.isfile(local_report):
         full_report = torch.load(local_report)
 
-        # if df_format:
+        if df_format:
+            print("Convert to dataframe format ...")
+            df_return = convert_report_to_df(full_report)
 
-    return full_report, df
+    return full_report, df_return
 
 
 
