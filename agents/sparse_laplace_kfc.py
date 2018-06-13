@@ -1,4 +1,6 @@
 from typing import Dict, Iterator, List, Tuple, Union
+
+import torch
 import torch.nn.functional as functional
 from torch import Tensor
 
@@ -33,7 +35,7 @@ class GaussianPrior(Prior):
             diff2[name] = diff * diff
             a = diff2[name].sum() if a is None else (a + diff2[name].sum())
             count_no += values.nelement()
-        a /= count_no
+        # a /= count_no
         return self.kfhp.hessian_product_loss(diff2) + self.diag_adjust * a
 
 
@@ -45,15 +47,8 @@ class SparsityPrior(Prior):
 
     def __call__(self, vector: Iterator[Tuple[str, Tensor]]) -> Tensor:
         loss = None
-        count = 0
-        for _, values in vector:
-            if self.p == 1:
-                new_loss = values.abs().sum()
-            else:
-                new_loss = values.abs().pow(self.p).sum()
-            count += values.nelement()
-            loss = new_loss if loss is None else (loss + new_loss)
-        return loss / count
+        all_p = torch.cat([values.view(-1) for (_, values) in vector], dim=0)
+        return torch.norm(all_p, p=self.p)
 
 
 class SparseKFLaplace(BaseAgent):
@@ -70,6 +65,8 @@ class SparseKFLaplace(BaseAgent):
         self.laplace_scale: float = agent_args.laplace_scale
         self.sparsity_scale: float = agent_args.sparsity_scale
         self.diag_adjust: float = agent_args.diag_adjust  # (H + λI)
+        self.use_exact: bool = agent_args.use_exact
+        self.clamp_vector: bool = agent_args.clamp_vector
 
         self.saved_tasks_no = 0
         self.priors: Dict[str, Prior] = []
@@ -100,13 +97,15 @@ class SparseKFLaplace(BaseAgent):
             for _idx, prior in enumerate(self.priors):
                 prior_loss += self.laplace_scale * prior(model.named_parameters())
         losses = {
+            "nll loss": loss.item(),
             "sparsity p-norm": sparsity_loss.item(),
             "Gaussian prior": prior_loss.item()
         }
         loss += prior_loss + sparsity_loss
+
+        loss /= self.nll_scale
         loss.backward()
         self._optimizer.step()
-
         return outputs, loss, losses
 
     def _end_train_task(self):
@@ -114,6 +113,8 @@ class SparseKFLaplace(BaseAgent):
         assert hasattr(train_loader, "__len__")
         self._optimizer.zero_grad()
         model = self._model
+        model.use_exact = False
+        model.clamp_vector = self.clamp_vector
         model.do_kf = True
         for _batch_idx, (data, targets, head_idx) in enumerate(train_loader):
             model.zero_grad()

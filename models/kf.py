@@ -46,11 +46,13 @@ class KFHessianProduct(object):
 
     def __init__(self,
                  inputs_cov: Dict[str, List[Tensor]],
-                 outputs_hess: Dict[str, List[Tensor]]):
+                 outputs_hess: Dict[str, List[Tensor]],
+                 clamp_vector: bool = False):
 
         if len(inputs_cov) != len(outputs_hess):
             raise ValueError("Lists should be equal in length.")
 
+        self.clamp_vector = clamp_vector  # clamp values in Hv
         self.factors = dict({})  # type: Dict[str, List[Tuple[Tensor, Tensor]]]
         for module_name, i_cov_lst in inputs_cov.items():
             o_hess_lst = outputs_hess[module_name]
@@ -64,7 +66,10 @@ class KFHessianProduct(object):
         params = torch.cat([weight, bias], dim=1)
         loss, prods_no = params.new_zeros(1), 0
         for i_cov, o_hess in self.factors[module_name]:
-            loss += (o_hess @ params @ i_cov).clamp(min=0).sum()
+            if self.clamp_vector:
+                loss += (o_hess @ params @ i_cov).clamp(min=0).sum()
+            else:
+                loss += (o_hess @ params @ i_cov).sum()
             prods_no += 1
         loss /= prods_no
         return loss
@@ -91,11 +96,12 @@ class KroneckerFactored(nn.Module):
     DONE = 3
 
     def __init__(self,
-                 do_checks: bool=False,
-                 use_fisher: bool=True,
-                 use_exact: bool=False,
-                 verbose: bool=False,
-                 average_factors: bool=True) -> None:
+                 do_checks: bool=False,  # Check gradients, and activate some asserts
+                 use_fisher: bool=True,  # Fallback to Fisher for unsupported architectures
+                 use_exact: bool=False,  # Use exact block Hessian when available
+                 verbose: bool=False,    # Print info
+                 average_factors: bool=True,
+                 clamp_vector: bool=False) -> None:  # Average factors E(H) = E(aaT) kf E(ggT)
         super(KroneckerFactored, self).__init__()
         self.__my_handles = []
         self.__kf_mode = False  # One must activate this
@@ -104,6 +110,7 @@ class KroneckerFactored(nn.Module):
         self.__do_checks = do_checks
         self.__verbose = verbose
         self.__average_factors = average_factors
+        self.clamp_vector = clamp_vector
 
         # Per KF computation (persistent over several fwd+bwd's)
         self.__outputs_hess = dict({})  # type: Dict[str, List[Tensor]]
@@ -158,6 +165,14 @@ class KroneckerFactored(nn.Module):
     @average_factors.setter
     def average_factors(self, value: bool) -> None:
         self.__average_factors = value
+
+    @property
+    def use_exact(self) -> bool:
+        return self.__use_exact
+
+    @use_exact.setter
+    def use_exact(self, value: bool) -> None:
+        self.__use_exact = value
 
     @property
     def verbose(self) -> bool:
@@ -500,6 +515,7 @@ class KroneckerFactored(nn.Module):
             for tensors in self.__outputs_hess.values():
                 assert len(tensors) == 1
                 tensors[0].mul_(coeff)
-        kfhp = KFHessianProduct(self.__inputs_cov, self.__outputs_hess)
+        kfhp = KFHessianProduct(self.__inputs_cov, self.__outputs_hess,
+                                clamp_vector=self.clamp_vector)
         self.do_kf = False  # Do not put above as this drops tensors
         return kfhp
