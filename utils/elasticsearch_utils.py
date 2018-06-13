@@ -99,7 +99,7 @@ def get_complex_key_recursive(dd: Dict, key: List[str], sep: str = ".", sit: str
 
     kk = key[0]
 
-    while kk not in dd and key[0] != sit:
+    while kk not in dd and re.match("\[.*\]", key[0]):
         key = key[1:]
         if len(key) > 0:
             kk += sep + key[0]
@@ -223,7 +223,8 @@ def include_dict_complex_keys(data: Dict, include_keys: List[str],
             index = pd.MultiIndex.from_arrays(index_col, names=range(len(index_col)))
             df_index = pd.DataFrame(df["values"].values, index=index)
 
-            group = 0
+            # Only if smart group > 1 drop indexes
+            group = 1
             index_level = len(index.levels) - 2
 
             while group < smart_group and index_level >= 0:
@@ -485,6 +486,43 @@ def get_hits_dict_query(query: Dict, ids: List[str] = list(),
     return res
 
 
+def table_data_by_depth(data: Dict, unpack_list: bool = False) -> Tuple[List[Dict], int]:
+    """
+        Backtrack to be possible to handle large data.
+    """
+    original = deepcopy(data)
+
+    table_data = []
+    stack = []
+    crt_row = {}
+    max_depth = 0
+    crt_dict = original
+    while len(original) > 0:
+        while len(crt_dict.keys()) > 0:
+            kk = next(iter(crt_dict))
+            vv = crt_dict[kk]
+            if isinstance(vv, dict):
+                stack.append(crt_dict)
+                crt_row[len(crt_row.keys())] = kk
+                crt_dict = vv
+            elif (isinstance(vv, list) or isinstance(vv, np.ndarray)) and unpack_list:
+                crt_dict[kk] = {k: v for k, v in enumerate(vv)}
+            else:
+                new_row = deepcopy(crt_row)
+                new_row[len(new_row.keys())] = kk
+                new_row[len(new_row.keys())] = vv
+                max_depth = max(max_depth, len(new_row.keys()))
+                table_data.append(new_row)
+                crt_dict.pop(kk, None)
+
+        if len(stack) > 0:
+            crt_dict = stack.pop()
+            last_k = crt_row.pop(len(stack))
+            crt_dict.pop(last_k)
+
+    return table_data, max_depth
+
+
 def get_data_as_dataframe():
     """Get all data in database to pandas dataframe"""
     all_hits = get_all_hits()
@@ -529,6 +567,64 @@ def update_fields_select_df(df: Union[pd.DataFrame, Any], new_fields: List[str],
     return new_df, select_keys_col, select_smart_group_col
 
 
+def get_variable_key_names(complex_key: str, base_name: str, sep:str = ".",
+                           siterator: str = "[_]") -> List[str]:
+
+    empty = re.findall("\[([^\]]*)\]", siterator)[0]
+    match = re.findall("\[([^\]]*)\]", complex_key)
+    if not base_name.endswith(sep):
+        base_name += sep
+    return [x if x != empty else f"{base_name}{ix}" for ix, x in enumerate(match)]
+
+
+def convert_report_to_df(report: Dict, sep=".", siterator: str = "[_]", unpack_list: bool=False):
+    """
+        Transform report format to dataframe.
+        single key information will be distributed to all classes
+        dictionaries will be merged on comm
+    """
+    infos = [x["info"] for x in report]
+    datas = [x["data"] for x in report]
+    full_df = None
+
+    for ix, data in enumerate(datas):
+        new_d = {}
+        infos[ix]["complex_key"] = []
+
+        dataframes = []
+        for k, v in data.items():
+            if v is not None:
+                infos[ix]["complex_key"].append(k)
+
+                assert len(v.keys()) == 1, "First key should be the common part of complex_key"
+                common_key = next(iter(v))
+                variable_data = v[common_key]
+
+                if isinstance(variable_data, dict):
+                    # new_d = flatten_dict(variable_data)
+                    variable_data, _ = table_data_by_depth(variable_data, unpack_list=unpack_list)
+                    key_df = pd.DataFrame(variable_data)
+                    if len(key_df.columns) > 1:
+                        # Check to see if named variable columns
+                        col_names = get_variable_key_names(k, common_key,
+                                                           sep=sep, siterator=siterator)
+                        col_names = col_names[:len(key_df.columns)]
+                        key_df.columns = col_names
+                    else:
+                        key_df.columns = [common_key]
+                else:
+                    key_df = pd.DataFrame([variable_data], columns=[common_key])
+
+                    # new_d = flatten_dict(variable_data)
+                key_df["_match_"] = 0
+                if full_df is None:
+                    full_df = key_df
+                else:
+                    full_df = full_df.merge(key_df, how='left', on='_match_')
+
+    return full_df
+
+
 def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(),
                        dir_regex_any: List[str] = list(), dir_regex_all: List[str] = list(),
                        include_keys: List[str] = list(), smart_group: Union[int, List[int]] = 0,
@@ -543,7 +639,7 @@ def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(
     from utils.pid_wait import wait_pid
 
     full_report = {}
-    df =  None
+    df = None
 
     report_name = f"report_{int(time.time())}.pkl"
     server_path = os.path.join(SERVER_eFOLDER, report_name)
@@ -586,24 +682,11 @@ def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(
     if os.path.isfile(local_report):
         full_report = torch.load(local_report)
 
-        if df_format:
-            report = full_report[0]
-            infos = [x["info"] for x in report]
-            datas = [x["data"] for x in report]
-            new_data = {}
-
-            for ix, data in enumerate(datas):
-                new_d = {}
-                infos[ix]["complex_key"] = []
-                for k, v in data.items():
-                    if v is not None:
-                        infos[ix]["complex_key"].append(k)
-                        new_d.update(v)
-                new_data[ix] = new_d
-
-            df = pd.DataFrame.from_dict(new_data)
+        # if df_format:
 
     return full_report, df
+
+
 
 
 if __name__ == "__main__":
