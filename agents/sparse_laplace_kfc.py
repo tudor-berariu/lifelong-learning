@@ -66,6 +66,7 @@ class SparseKFLaplace(BaseAgent):
         self.sparsity_p_norm: float = agent_args.sparsity_p_norm
         self.prior_scale: float = agent_args.prior_scale
         self.sparsity_scale: float = agent_args.sparsity_scale
+        self.sparsity_task_decay: float = agent_args.sparsity_task_decay
         self.diag_adjust: float = agent_args.diag_adjust  # (H + λI)
         self.use_exact: bool = agent_args.use_exact
         self.clamp_vector: bool = agent_args.clamp_vector
@@ -116,6 +117,7 @@ class SparseKFLaplace(BaseAgent):
         return outputs, loss, losses
 
     def _end_train_task(self):
+        self.sparsity_scale *= self.sparsity_task_decay
         train_loader, _ = self.crt_data_loaders
         assert hasattr(train_loader, "__len__")
         self._optimizer.zero_grad()
