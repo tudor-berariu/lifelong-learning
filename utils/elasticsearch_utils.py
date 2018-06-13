@@ -85,7 +85,7 @@ def get_complex_key_recursive(dd: Dict, key: List[str], sep: str = ".", sit: str
     if len(key) < 1:
         return dd
 
-    if key[0] == sit:
+    if re.match("\[.*\]", key[0]):
         if isinstance(dd, dict):
             res = {}
             for kk, vv in dd.items():
@@ -99,7 +99,7 @@ def get_complex_key_recursive(dd: Dict, key: List[str], sep: str = ".", sit: str
 
     kk = key[0]
 
-    while kk not in dd and re.match("\[.*\]", key[0]):
+    while kk not in dd and not re.match("\[.*\]", key[0]):
         key = key[1:]
         if len(key) > 0:
             kk += sep + key[0]
@@ -115,7 +115,7 @@ def get_complex_key_recursive(dd: Dict, key: List[str], sep: str = ".", sit: str
 def rem_complex_key_recursive(dd: Dict, key: List[str], sep: str = ".", sit: str = "[_]"):
     """ Inplace Remove recursive complex key """
 
-    if key[0] == sit:
+    if re.match("\[.*\]", key[0]):
         if isinstance(dd, dict):
             for kk, vv in dd.items():
                 rem_complex_key_recursive(vv, key[1:], sep=sep, sit=sit)
@@ -125,7 +125,7 @@ def rem_complex_key_recursive(dd: Dict, key: List[str], sep: str = ".", sit: str
 
     kk = key[0]
 
-    while kk not in dd and key[0] != sit:
+    while kk not in dd and not re.match("\[.*\]", key[0]):
         key = key[1:]
         if len(key) > 0:
             kk += sep + key[0]
