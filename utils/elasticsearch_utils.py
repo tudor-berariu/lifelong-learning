@@ -627,7 +627,8 @@ def convert_report_to_df(report: Dict, sep=".", siterator: str = "[_]", unpack_l
                     else:
                         key_df.columns = [common_key]
                 else:
-                    key_df = pd.DataFrame([variable_data], columns=[common_key])
+                    key_df = pd.DataFrame([0], columns=[common_key], dtype = np.object)
+                    key_df.loc[0, common_key] = variable_data
 
                 key_df["_match_"] = 0
 
