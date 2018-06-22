@@ -25,9 +25,9 @@ lifelong:
   mode: sparse_kf
 
   sparsity_p_norm: .9
-  sparsity_scale: .0000005
+  sparsity_scale: .000001
   sparsity_task_decay: .1
-  prior_scale: 10000000.
+  prior_scale: 100000000.
   diag_adjust: 0.
   nll_scale: 1.
   use_exact: no
