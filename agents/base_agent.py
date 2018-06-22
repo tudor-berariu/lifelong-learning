@@ -75,6 +75,7 @@ class BaseAgent(object):
         self.all_eval_ind_epochs: int = 0
         self.crt_task_epoch: int = -1
         self.crt_task_idx: int = 0
+        self.crt_eval_task_idx: int = 0
         self.crt_data_loaders: Iterator[Tuple[TaskDataLoader, TaskDataLoader]] = None
         self.crt_task_name: str = None
         self.crt_eval_epoch: int = 0
@@ -153,15 +154,16 @@ class BaseAgent(object):
                     # Validate on first 'how_many' tasks
                     how_many = self.no_tasks if self.eval_not_trained else train_task_idx + 1
                     new_best_acc_cnt = new_best_loss_cnt = 0
-                    for val_task_idx, val_loader in enumerate(multitask.test_tasks(how_many)):
-                        val_loss, val_acc, info = self._eval_task(val_task_idx, val_loader,
+                    for eval_task_idx, val_loader in enumerate(multitask.test_tasks(how_many)):
+                        self.crt_eval_task_idx = eval_task_idx
+                        val_loss, val_acc, info = self._eval_task(eval_task_idx, val_loader,
                                                                   crt_epoch, eval_epoch)
 
                         #  -- Reporting
                         val_info = {"acc": val_acc, "loss": val_loss}
                         val_info.update(info)
 
-                        new_best_acc, new_best_loss = report.trace_eval(self.seen, val_task_idx,
+                        new_best_acc, new_best_loss = report.trace_eval(self.seen, eval_task_idx,
                                                                         crt_epoch, eval_epoch,
                                                                         self.all_eval_ind_epochs,
                                                                         val_info)
@@ -169,7 +171,7 @@ class BaseAgent(object):
                         new_best_loss_cnt += new_best_loss
 
                         # Early task stop
-                        if val_task_idx == train_task_idx:
+                        if eval_task_idx == train_task_idx:
                             if new_best_acc + new_best_loss > 0:
                                 eval_no_improvement = 0
                             else:
@@ -267,7 +269,7 @@ class BaseAgent(object):
                         print(f'\t\t[Train] [Epoch: {epoch:3}] [Batch: {batch_idx:5}]:\t '
                               f'[Loss] crt: {losses.val:3.4f}  avg: {losses.avg:3.4f}\t'
                               f'[Accuracy] crt: {acc.val:3.2f}  avg: {acc.avg:.2f}')
-                        self.batch_print_aux_losses()
+                        # self.batch_print_aux_losses()
 
             if self.stop_training:
                 break
