@@ -423,7 +423,7 @@ class Reporting(object):
         last[task_idx].update(new_info)
         return new_best_acc, new_best_loss
 
-    def finished_training_task(self, no_trained_tasks: int, seen: int) -> None:
+    def finished_training_task(self, no_trained_tasks: int, seen: int, info=None) -> None:
         print(''.join("" * 79))
         print(f"Finished training {clr(f'{no_trained_tasks}', attrs=['bold']):s}"
               f"\t seen: {seen} images")
@@ -475,6 +475,11 @@ class Reporting(object):
             "acc": all_acc,
             "loss": all_loss
         }
+
+        # Update with sent info
+        if info is not None:
+            eval_data["info"] = deepcopy(info)
+
         task_train_tick.append(eval_data)
 
         # ==========================================================================================
