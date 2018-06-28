@@ -42,6 +42,8 @@ def train_template(init_model, get_optim, multitask, args):
         Train using script from folder with name args.mode.
         Method with the same name will be called.
     """
+    package_name = "train_scripts"
+
     import glob
     import importlib
 
@@ -49,12 +51,12 @@ def train_template(init_model, get_optim, multitask, args):
 
     # Get list of local modules
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    py_files = glob.glob(f"{dir_path}/*.py")
+    py_files = glob.glob(f"{dir_path}/{package_name}/*.py")
     py_module = [os.path.splitext(os.path.basename(x))[0] for x in py_files]
 
     # Import module
     assert module_name in py_module, f"No module with this name: {module_name}"
-    module = importlib.import_module(module_name)
+    module = importlib.import_module(f"{package_name}.{module_name}")
 
     # Get function
     assert hasattr(module, module_name), f"Module {module_name} has no function {module_name}"
