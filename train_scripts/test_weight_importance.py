@@ -53,7 +53,7 @@ def calc_constraint(model, optimizer, train_loader):
 
 
 def perturb_network(args: Args, val_loader: TaskDataLoader, model: nn.Module, epoch: int,
-                    report_freq: int = 100):
+                    report_freq: int = 1000):
 
     print("Perturb network ... ")
 
@@ -72,6 +72,7 @@ def perturb_network(args: Args, val_loader: TaskDataLoader, model: nn.Module, ep
     total_no_param = sum(no_param) * no_segments * no_samples
     done_param = 0
     last_t = time.time()
+    first_t = time.time()
 
     print(f"No parameters: {no_param}; Total: {total_no_param}")
 
@@ -93,9 +94,7 @@ def perturb_network(args: Args, val_loader: TaskDataLoader, model: nn.Module, ep
             acc = acc.view(torch.Size([no_elem]) + res_size)
             loss = loss.view(torch.Size([no_elem]) + res_size)
 
-            sys.stdout.write(f"\rSegment idx: {0} / {no_segments};"
-                             f"\t Sample: {0} / {no_samples}"
-                             f"\t Param_idx: {0} / {no_elem}")
+            sys.stdout.write(f"\rSegment idx: ")
             sys.stdout.flush()
 
             for segment_idx in range(no_segments):
@@ -115,11 +114,13 @@ def perturb_network(args: Args, val_loader: TaskDataLoader, model: nn.Module, ep
                             dur = time.time() - last_t
                             last_t = time.time()
                             remaining_time = (total_no_param - done_param) // report_freq * dur
+                            elaps = time.time() - first_t
 
                             sys.stdout.write(f"\rSegment idx: {segment_idx} / {no_segments};"
                                              f"\t Sample: {p_ix} / {no_samples}"
                                              f"\t Param_idx: {param_idx} / {no_elem}"
-                                             f"\t Remaining: {remaining_time}")
+                                             f"\t Remaining: {remaining_time:.4f}"
+                                             f"\t Elaps: {elaps:.4f}")
                             sys.stdout.flush()
 
                             done_param += report_freq
