@@ -4,6 +4,7 @@
     test_weight_importance:
         variance_segments: ${eval, torch.arange(0, 10,0.1)}
         no_samples: 10
+        max_group_param: 10000
 
 """
 import torch.nn as nn
@@ -13,17 +14,13 @@ from typing import Callable, Any, Tuple, Union, Iterator
 from termcolor import colored as clr
 import torch
 import torch.nn.functional as functional
-from functools import reduce
-from operator import mul
 import copy
-from typing import Union, Dict, Tuple, NamedTuple
 import sys
 import time
 
 # Project imports
 from my_types import Args
 from multi_task import MultiTask, TaskDataLoader, Batch
-from utils.util import AverageMeter, accuracy
 from utils.reporting import Reporting
 from utils.config_parse import eval_pattern
 from utils.util import standard_validate, standard_train
@@ -59,6 +56,7 @@ def perturb_network(args: Args, val_loader: TaskDataLoader, model: nn.Module, ep
 
     variance_segments = eval_pattern(args.variance_segments)
     no_samples = args.no_samples
+    max_group_param = args.max_group_param
     model = copy.deepcopy(model)
 
     no_segments = len(variance_segments) - 1
@@ -82,7 +80,7 @@ def perturb_network(args: Args, val_loader: TaskDataLoader, model: nn.Module, ep
         if param.requires_grad:
 
             # Build results tensors
-            no_elem = param.nelement()
+            no_elem = min(max_group_param, param.nelement())
             param_size = param.size()
             no_dim = len(param_size)
 
