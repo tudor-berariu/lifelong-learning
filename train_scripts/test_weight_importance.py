@@ -17,6 +17,7 @@ import torch.nn.functional as functional
 import copy
 import sys
 import time
+import numpy as np
 
 # Project imports
 from my_types import Args
@@ -56,7 +57,7 @@ def perturb_network(args: Args, val_loader: TaskDataLoader, model: nn.Module, ep
 
     variance_segments = eval_pattern(args.variance_segments)
     no_samples = args.no_samples
-    max_group_param = args.max_group_param
+    max_group_param = args.max_group_param if args.max_group_param != 0 else np.inf
     model = copy.deepcopy(model)
 
     no_segments = len(variance_segments) - 1
