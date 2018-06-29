@@ -80,7 +80,7 @@ def perturb_network(args: Args, val_loader: TaskDataLoader, model: nn.Module, ep
         if param.requires_grad:
 
             # Build results tensors
-            no_elem = min(max_group_param, param.nelement())
+            no_elem = param.nelement()
             param_size = param.size()
             no_dim = len(param_size)
 
@@ -106,7 +106,7 @@ def perturb_network(args: Args, val_loader: TaskDataLoader, model: nn.Module, ep
 
                 for p_ix, perturbation in enumerate(samples):
 
-                    for param_idx in range(no_elem):
+                    for param_idx in range(min(max_group_param, no_elem)):
 
                         if (param_idx+1) % report_freq == 0:
                             dur = time.time() - last_t
@@ -134,7 +134,7 @@ def perturb_network(args: Args, val_loader: TaskDataLoader, model: nn.Module, ep
             loss = loss.view(param_size + res_size)
             results[name] = {"acc": acc, "loss": loss}
 
-    return dict({"results": results, "res_size": res_size})
+    return dict({"results": results, "res_size": res_size, "max_group_param": max_group_param})
 
 
 def test_weight_importance(init_model: Callable[[Any], nn.Module],
