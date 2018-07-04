@@ -521,6 +521,9 @@ class Reporting(object):
         score_base = eval_metrics["score_base"]
         score_all = eval_metrics["score_all"]
 
+        max_score_i = np.argmax(score_all_s)
+        max_score = score_all_s[max_score_i]
+
         def l_msg(ls: List[float]):
             return "".join([f"{x:3.6f}   " for x in ls])
 
@@ -528,6 +531,7 @@ class Reporting(object):
         print(f"\t[{idx:3}] score New's  (n):   [{score_new:3.6f}]    [{l_msg(score_new_s)}]")
         print(f"\t[{idx:3}] score Base's (n):   [{score_base:3.6f}]    [{l_msg(score_base_s)}")
         print(f"\t[{idx:3}] score All's  (n):   [{score_all:3.6f}]    [{l_msg(score_all_s)}]")
+        print(f"\t[{idx:3}] best score All's  (n):   [{max_score:3.6f}]    [{max_score_i}]")
 
         # Plot
         if mode == "seq":

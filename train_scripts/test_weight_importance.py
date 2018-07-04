@@ -6,7 +6,23 @@
         no_samples: 10
         max_group_param: 10000
 
+    Saves in results.pkl
+
+    Consider 1 single model 1 data set trained ( => 1 task train tick)
+
+    mode = data["_task_train_tick"][0]["info"]["mode"]
+
+    # {param_name: torch.tensor(torch.Size(param))
+    constraint = data["_task_train_tick"][0]["info"]["constraint"]
+
+    # res_size: no_segments, no_samples
+    res_size = data["_task_train_tick"][0]["info"]["res_size"]
+
+    # {params_name: {acc: torch.tensor(torch.Size(param) + res_size), loss: ... } }
+    results = data["_task_train_tick"][0]["info"]["results"]
+
 """
+
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import MultiStepLR
@@ -129,7 +145,10 @@ def perturb_network(args: Args, val_loader: TaskDataLoader, model: nn.Module, ep
                         val_loss, val_acc = standard_validate(val_loader, model, epoch)
                         loss[param_idx, segment_idx, p_ix] = val_loss
                         acc[param_idx, segment_idx, p_ix] = val_acc
+
                         param.data.view(-1)[param_idx].sub_(perturbation)
+
+                        print(f"{param_idx}_{segment_idx}_{p_ix} __ ({perturbation})")
 
             acc = acc.view(param_size + res_size)
             loss = loss.view(param_size + res_size)

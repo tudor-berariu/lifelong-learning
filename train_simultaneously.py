@@ -20,7 +20,7 @@ def train_simultaneously(model_class: Type,
     print(f"Training {clr('simultaneously', attrs=['bold']):s} on all tasks.")
 
     epochs_per_task = args.train.epochs_per_task
-    stop_if_not_better = args.train.stop_if_not_better
+    stop_if_not_better = args.train.stop_if_not_better if args.train.stop_if_not_better else np.inf
     max_nan_loss = args.train.max_nan_loss
     model_params = args.model
     batch_train_show_freq = args.reporting.batch_train_show_freq
@@ -85,6 +85,13 @@ def train_simultaneously(model_class: Type,
             all_tasks_new_best_loss += new_best_loss
             all_val_epoch += 1
 
+        val_epoch += 1
+
+        if crt_epoch % save_report_freq == 0:
+            report.save()
+
+        report.finished_training_task(no_tasks, seen)
+
         # Check improvements
         if all_tasks_new_best_acc + all_tasks_new_best_loss > 0:
             not_better = 0
@@ -102,12 +109,5 @@ def train_simultaneously(model_class: Type,
                 break
         else:
             no_nan_loss = 0
-
-        val_epoch += 1
-
-        if crt_epoch % save_report_freq == 0:
-            report.save()
-
-        report.finished_training_task(no_tasks, seen)
 
     report.save(final=True)

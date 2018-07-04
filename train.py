@@ -83,6 +83,7 @@ def run(args: Args, multitask: MultiTask = None) -> None:
     print(torch.__version__)
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
+    torch.backends.cudnn.benchmark = True
 
     args.device = device = "cuda:0" if args.cuda else "cpu"
     for key, value in args.__dict__.items():
