@@ -69,14 +69,32 @@ def get_score_baseline():
     return df
 
 
-def get_base_score(task_info: List[Dict], model_name: str):
+def get_base_score(task_info: List[Dict], model_info: Dict):
     task_base_ind = dict()
 
     df_base = get_score_baseline()
+
+    # Merge model info
+    model_info = [str(ALL_MODELS_BASE_TYPE[model_info["name"]]),
+                  "|".join(str(x) for x in model_info["hidden_units"])]
+    model_name_separator = "_"
+
     for x in task_info:
         base = df_base[df_base["dataset_name"] == x["dataset_name"]]
-        base = base[base["model_base_type"] == ALL_MODELS_BASE_TYPE[model_name]]
-        task_base_ind[x["idx"]] = base.iloc[0]["base_score"]
+
+        merge_cnt = len(model_info)
+        while merge_cnt > 0:
+            model_name = model_name_separator.join(model_info[:merge_cnt])
+            tsk_base = base[base["model_base_type"] == model_name]
+            if len(tsk_base) > 0:
+                break
+            merge_cnt -= 1
+
+        if len(tsk_base) > 0:
+            task_base_ind[x["idx"]] = tsk_base.iloc[0]["base_score"]
+        else:
+            task_base_ind[x["idx"]] = 1.
+
     return task_base_ind
 
 
@@ -180,7 +198,7 @@ class Reporting(object):
                                                  f"{os.path.basename(file_path)}_script"))
 
         # Should read baseline for each task (individual/ simultanous)
-        self.task_base_ind = get_base_score(task_info, args.model.name)
+        self.task_base_ind = get_base_score(task_info,  namespace_to_dict(args.model))
 
         # Update task base ind in task_info
         for x in task_info:
@@ -797,7 +815,10 @@ class Reporting(object):
 
             # p = subprocess.Popen(remote_cmd + f"nohup {SERVER_PYTHON} {SERVER_SCRIPT} "
             #                                   f"{server_path} &", shell=True)
-            p = subprocess.Popen(remote_cmd + f"{SERVER_PYTHON} {SERVER_eUPLOAD_SCRIPT} {server_path}",
+
+            p = subprocess.Popen(remote_cmd +
+                                 f"{SERVER_PYTHON} {SERVER_eUPLOAD_SCRIPT} {server_path}" +
+                                 f" --force-update={force_update}",
                                  shell=True)
             sts = wait_pid(p.pid, timeout=120)
 
