@@ -340,6 +340,16 @@ def clean_almost_all():
             'match_all': {}
         }
     }
+
+    # doc = {
+    #     'size': 1000,
+    #     "query":  {"bool": { "must": {
+    #         "term": {
+    #             "args.experiment": "test_depth",
+    #         }
+    #     }}}
+    # }
+
     ignore_key = "GFs372MBm5wd3rDHv_cu"
 
     res = es.search(index=eINDEX, doc_type=eDOC, body=doc, scroll='1m')
@@ -357,20 +367,30 @@ def clean_almost_all():
 
 def search_by_timestamp(start_timestamp, es=None):
     query = {
-        "query": {
-            "match": {
-                "start_timestamp": {
-                    "query": start_timestamp,
-                }
+        'size': 1000,
+        "query":  {"bool": { "must": {
+            "term": {
+                "start_timestamp": start_timestamp,
             }
-        }
+        }}}
     }
 
     if es is None:
         es = init_elastic_client()
 
-    res = es.search(index=eINDEX, doc_type=eDOC, body=query)
-    return res, len(res["hits"]["hits"])
+    res = es.search(index=eINDEX, doc_type=eDOC, body=query, scroll='1m')
+
+    # Filter for double precision:
+    hits = []
+    while len(res["hits"]["hits"]) > 0:
+        # Update value:
+        hits.extend([x for x in res["hits"]["hits"] if x["_source"]["start_timestamp"] ==
+                           start_timestamp])
+
+        scroll = res['_scroll_id']
+        res = es.scroll(scroll_id=scroll, scroll='1m')
+
+    return hits, len(hits)
 
 
 def get_all_hits():
@@ -716,8 +736,6 @@ def get_server_reports(e_ids: List[str] = list(), experiments: List[str] = list(
             df_return = convert_report_to_df(full_report)
 
     return full_report, df_return
-
-
 
 
 if __name__ == "__main__":
