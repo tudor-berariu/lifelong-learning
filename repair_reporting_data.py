@@ -1,240 +1,161 @@
 import argparse
 import torch
-from copy import deepcopy
-from dateutil import parser as dateparser
 import datetime
 import torch.multiprocessing as mp
 import itertools
-from liftoff.config import namespace_to_dict
 import os
 import glob
+from typing import Dict, NamedTuple, List, Tuple, Set
+import time
 
-from utils.reporting import Reporting, EVAL_METRICS_BASE, get_base_score, EPISODIC_METRICS
-from utils.util import split_first_argument
-import numpy as np
+from reports_repairs import REPAIRS
+
+K_EXPERIMENT_TIMESTAMP = "_start_timestamp"
+K_REPAIRS = "__repairs"
+K_REPAIR_HISTORY = "__repair_history"
+
+ORIGINAL_FORMAT = "_{}_original"
+DATA_FILENAME = "reporting.pkl"
+
+RepairHistory = NamedTuple(
+    "RepairHistory",
+    [("timestamp", float),
+     ("repaired_keys", List[int])]
+)
 
 
-def run_fix(args):
-    p_idx, file_path, force = args
-    print(f"[_{p_idx}_] Working on: {file_path}")
+def get_winit(d: Dict, k: str, init_value=None):
+    if k in d:
+        return d[k]
+    d[k] = init_value
+    return d[k]
 
+
+def get_function_name(function_ref) -> str:
+    return str(function_ref).split()[1]
+
+
+def repair_template(data: Dict, lprint = print, eprint = print):
+    """
+    Should apply fixes inplace on dictionary data
+
+    :param data: Data dictionary
+    :param lprint: function to use to log information
+    :param eprint: function to use to log error information
+    :return: Return code: 0 - Success, >0 - Errors
+    """
+    return 0
+
+
+def get_original_path(path: str):
+    file_path_basename = ORIGINAL_FORMAT.format(os.path.basename(path))
+    return os.path.join(os.path.dirname(path), file_path_basename)
+
+
+"""
+    define repairs: 
+    {
+        KEY: (function, timestamp of repair implementation)
+    }
+"""
+
+ERROR_CODES = {
+    330 : "Can't open normal data {} err: {}",
+    331 : "Can't open even original data {} err: {}",
+    332 : "No data loaded!",
+    333 : f"Experiment with no timestamp key ({K_EXPERIMENT_TIMESTAMP})"
+}
+
+
+def run_fix(_args: Tuple):
+    p_idx, file_path, force, force_keys = _args
+    original_file_path = get_original_path(file_path)
+
+    # -- Define print functions
+    def lprint(info):
+        print(f"[_{p_idx}_] {info}")
+
+    def eprint(info):
+        print(f"[_{p_idx}_] [ERROR] {info}")
+
+    lprint(f"Working on: {file_path}")
+
+    # -- Load data dictionary
+    data: Dict = None
     try:
         data = torch.load(file_path)
     except Exception as e:
-        print(f"[_{p_idx}_] [ERROR] Can't open {file_path} err: {e}")
-        return 1
+        eprint(ERROR_CODES[330].format(file_path, e))
+        lprint("Fallback to original file")
 
-    fix = False
-    if "_start_timestamp" not in data:
-        tm = data["_start_time"]
-    else:
-        tm = data["_start_timestamp"]
+        # Try to load original data instead
+        try:
+            data = torch.load(original_file_path)
+        except Exception as e:
+            eprint(ERROR_CODES[331].format(original_file_path, e))
+            return 331
 
-    start_time = datetime.datetime.utcfromtimestamp(int(tm))
+    # Recheck if any data is loaded
+    if data is None:
+        eprint(ERROR_CODES[332])
+        return 332
 
-    if not isinstance(data["_args"], dict):
-        data["_args"] = namespace_to_dict(data["_args"])
+    # Identify experiment timestamp by
+    if K_EXPERIMENT_TIMESTAMP not in data:
+        eprint(ERROR_CODES[333])
+        return 333
+
+    tm = data[K_EXPERIMENT_TIMESTAMP]
+    exp_date = datetime.datetime.utcfromtimestamp(int(tm))
 
     # Add keys of repairs
-    if "__repairs" not in data:
-        data["__repairs"] = repair_keys = []
-    else:
-        repair_keys = data["__repairs"]
+    repaired_keys: Set = get_winit(data, K_REPAIRS, set())
+    repair_history: List = get_winit(data, K_REPAIR_HISTORY, list())
 
-    # ==============================================================================================
-    # -- Repair Last eval (1)
-    KEY = 0
-    if (start_time < dateparser.parse("Jun 12 2018 12:00AM") and KEY not in repair_keys) or force:
-        print(f"[_{p_idx}_] Repair Last eval ...")
+    crt_repair_k = []
+    r_codes = []
 
-        if "_eval_trace" in data:
-            eval_seen = sorted(data["_eval_trace"].keys())
-            data["_last_eval"] = {k: v[-1] for k, v in data["_eval_trace"][eval_seen[-1]].items()}
+    # -- Repair
+    for repair_k, (function_ref, implementation_date) in REPAIRS.items():
+        if (exp_date < implementation_date and repair_k not in repaired_keys) \
+                or force or (repair_k in force_keys):
 
-            # Repair best eval
-            best_eval = dict({task["idx"]: {"acc": {"value": -1, "seen": -1},
-                                            "loss": {"value": np.inf, "seen": -1}}
-                              for task in data["_task_info"]})
-            last_eval = dict({task["idx"]: {"acc": -1, "seen": -1, "loss": np.inf}
-                              for task in data["_task_info"]})
+            cprint = lambda info: lprint(f"[KEY {repair_k:4}] {info}")
 
-            for ix in eval_seen:
-                for task_idx in data["_eval_trace"][ix].keys():
-                    for eval in data["_eval_trace"][ix][task_idx]:
-                        Reporting.update_best(eval, last_eval, best_eval, task_idx, ix)
+            # Repair
+            cprint(f"* Try: {get_function_name(function_ref)} (Date: {implementation_date})")
 
-            data["_best_eval"] = best_eval
-            fix = True
-            repair_keys.append(KEY)
-        else:
-            print(f"[_{p_idx}_] Does not have key: _eval_trace")
+            return_code = -1
 
+            try:
+                return_code = function_ref(data, lprint=cprint, eprint=eprint)
+            except Exception as e:
+                eprint(f"While repairing {repair_k}. error: {e}")
 
-    # ==============================================================================================
-    # -- Repair Task Train tick
-    KEY = 1
-    if (start_time < dateparser.parse("Jun 12 2018 12:00AM") and KEY not in repair_keys) or force:
-        if data["_args"]["mode"] != "sim":
-
-            print(f"[_{p_idx}_] Repair Task Train tick ...")
-
-            all_seen = list(sorted(data["_eval_trace"].keys()))
-            ev_trace = data['_eval_trace']
-            epochs_per_task = data["_args"]["train"]["epochs_per_task"]
-            ix = epochs_per_task - 1
-            task_train_tick_idx = 0
-            tasks = []
-            while ix < len(all_seen):
-                idx = all_seen[ix]
-                task_eval_data = deepcopy(ev_trace[idx])
-                for i, v in task_eval_data.items():
-                    task_eval_data[i] = v[-1]
-                    task_eval_data[i]["seen"] = idx
-                data["_task_train_tick"][task_train_tick_idx]["task"] = task_eval_data
-                task_train_tick_idx += 1
-                ix += epochs_per_task
-
-            fix = True
-            repair_keys.append(KEY)
-
-    # ==============================================================================================
-    # -- Repair bugged Eval metrics calc for simultaneous mode
-    KEY = 2
-    if (start_time < dateparser.parse("Jun 12 2018 12:00AM") and KEY not in repair_keys) or force:
-        if data["_args"]["mode"] == "sim":
-            print(f"[_{p_idx}_] Repair bugged Eval metrics calc for simultaneous mode ...")
-
-            evm = data["_eval_metrics"]
-            last_eval = data["_last_eval"]
-            acc = []
-            for ix, v in last_eval.items():
-                acc.append(v["acc"])
-            base = last_eval[0]["acc"]
-            new = last_eval[max(last_eval.keys())]["acc"]
-            all = np.mean(acc)
-            evm.update({
-                'score_new_raw': [new],
-                'score_base_raw': [base],
-                'score_all_raw': [[all]],
-                'score_all_last_raw': [all],
-                'score_new': new,
-                'score_base': base,
-                'score_all': all,
-                'score_last': new})
-            fix = True
-            repair_keys.append(KEY)
-
-    # ==============================================================================================
-    # -- Recalculate metrics
-    KEY = 3
-    if (start_time < dateparser.parse("Jun 12 2018 12:00AM") and KEY not in repair_keys) or force:
-        print(f"[_{p_idx}_] Recalculate metrics ...")
-
-        # Update missing keys
-        eval_metrics = deepcopy(EVAL_METRICS_BASE)
-        no_tasks = len(data["_task_info"])
-        tasks_range = range(len(data["_task_info"]))
-        base = get_base_score(data["_task_info"], data["_args"]["model"]["name"])
-        # Update task base ind in task_info
-        for x in data["_task_info"]:
-            x["best_individual"] = base[x["idx"]]
-
-        no_scale_base = {ix: 1. for ix in base.keys()}
-        update_scores = Reporting.update_scores
-        update_episodic_scores = Reporting.update_episodic_scores
-        mode = data["_args"]["mode"]
-
-        # Simulate Reporting.finished_training_task
-        rep = (None, None, None, None)
-
-        if mode != "seq":
-            ev_trace = data['_eval_trace']
-            seen = sorted(data['_eval_trace'].keys())
-            task_eval_data = [[ev_trace[ix][tx][-1] for tx in tasks_range] for ix in seen]
-            no_trained_tasks = [no_tasks] * len(seen)
-            all_acc = [[ev_trace[ix][tx][-1]["acc"] for tx in tasks_range] for ix in seen]
-        else:
-            ttt = data["_task_train_tick"]
-            ev_trace = data['_eval_trace']
-            seen = [x["task"][0]["seen"] for x in ttt]
-            task_eval_data = [x["task"] for x in ttt]
-            no_trained_tasks = list(range(1, len(task_eval_data) + 1))
-            all_acc = [x["global"]["acc"] for x in ttt]
-
-        rep = zip(seen, task_eval_data, no_trained_tasks, all_acc)
-
-        #  -- Calculate metrics
-        for seen, task_eval_data, no_trained_tasks, all_acc in rep:
-            if mode == "seq":
-                eval_metrics["score_new_raw"].append(
-                    task_eval_data[no_trained_tasks - 1]["acc"])
-
-                if 0 in task_eval_data:
-                    eval_metrics["score_base_raw"].append(task_eval_data[0]["acc"])
-                else:
-                    eval_metrics["score_base_raw"].append(eval_metrics["score_base_raw"][-1])
-
-                eval_metrics["score_all_raw"].append([])
-                for key in sorted(task_eval_data):
-                    if key < no_trained_tasks:
-                        eval_metrics["score_all_raw"][-1].append(task_eval_data[key]["acc"])
+            # Done or not necessary
+            if return_code == 1 or return_code == 0:
+                # Did repair
+                crt_repair_k.append(repair_k)
+                cprint("Did repair")
             else:
-                # Fix for Simultanous mode (trained on all tasks)
-                eval_metrics["score_new_raw"] = all_acc
-                eval_metrics["score_base_raw"] = all_acc
-                eval_metrics["score_all_raw"] = [all_acc]
+                cprint(f"Did NOT do repair ({return_code})")
 
-            # Update base scores
-            _ = update_scores(eval_metrics, no_scale_base, t="_")
-            update_episodic_scores(eval_metrics, no_scale_base,
-                                   eval_metrics["_score_last"], all_acc, seen, t="_")
-            _ = update_scores(eval_metrics, base)
-            update_episodic_scores(eval_metrics, base, eval_metrics["score_last"], all_acc, seen)
+            r_codes.append((repair_k, return_code))
 
-        data["_eval_metrics"] = eval_metrics
+    repair_history.append(RepairHistory(time.time(), crt_repair_k))
+    repaired_keys.update(crt_repair_k)
 
-        fix = True
-        repair_keys.append(KEY)
+    if len(crt_repair_k) > 0:
+        # If no original file, move crt data to original_file_path and save afterwards
+        if not os.path.isfile(original_file_path):
+            os.rename(file_path, original_file_path)
 
-    # ==============================================================================================
-    # -- Add keys: _max_eval_all_epoch, _max_seen_train, _max_seen_eval, _finished_experiment
-    KEY = 4
-    if (start_time < dateparser.parse("Jun 12 2018 12:00AM") and KEY not in repair_keys) or force:
-        if "_finished_experiment" not in data:
-            print(f"[_{p_idx}_] Add keys _finished_experiment ...")
-
-            max_eval = -1
-            for k1, v1 in data["_eval_trace"].items():
-                for k2, v2 in v1.items():
-                    max_eval += len(v2)
-            max_train = -1
-            for k1, v1 in data["_train_trace"].items():
-                for k2, v2 in v1.items():
-                    max_train += len(v2)
-
-            data["_max_eval_all_epoch"] = max_eval
-            data["_max_train_all_epoch"] = max_train
-            data["_max_seen_train"] = max_seen_train= max(data["_train_trace"].keys())
-            data["_max_seen_eval"] = max_seen_eval = max(data["_eval_trace"].keys())
-
-            # Check if finished or no
-            no_tasks = len(data["_task_info"])
-            epochs_per_task = data["_args"]["train"]["epochs_per_task"]
-            should_train = no_tasks * epochs_per_task
-            reached_max_train = should_train == max_train + 1
-            same_seen = data["_max_seen_train"] == data["_max_seen_eval"]
-            all_final_tasks_evaluated = len(data["_eval_trace"][max_seen_eval]) == no_tasks
-
-            data["_finished_experiment"] = reached_max_train \
-                                           and same_seen and all_final_tasks_evaluated
-
-            fix = True
-            repair_keys.append(KEY)
-
-    if fix:
         torch.save(data, file_path)
 
-    print(f"[_{p_idx}_] Done (Fix: {fix})", "\n")
+    lprint(f"Done (Fix: {crt_repair_k})\n")
+    lprint(f"(Repair_k, return_code) {r_codes}\n")
+
+    return len(crt_repair_k), r_codes
 
 
 if __name__ == "__main__":
@@ -246,22 +167,44 @@ if __name__ == "__main__":
                         default=1, help=f'PROCS_NO')
     parser.add_argument('-f', action="store_true", dest="force",
                         default=False, help=f'Force update all')
+    parser.add_argument('-cf', dest="custom_force", nargs='+', type=int,
+                        help='Custom keys to force update upon.', default=[])
 
     args = parser.parse_args()
 
     if os.path.isdir(args.paths[0]):
-        args.paths = glob.glob(f"{args.paths[0]}/**/reporting.pkl", recursive=True)
+        args.paths = glob.glob(f"{args.paths[0]}/**/{DATA_FILENAME}", recursive=True)
 
     file_paths = args.paths
 
     cm = zip(
         range(len(file_paths)),
         file_paths,
-        itertools.repeat(args.force)
+        itertools.repeat(args.force),
+        itertools.repeat(args.custom_force)
     )
 
     p = mp.Pool(args.procs)
-    p.map(run_fix, cm)
+    results = p.map(run_fix, cm)
+
+    no_files = len(file_paths)
+    repaired = 0
+    with_errors = 0
+
+    for file, (keys_repaired, repair_codes) in zip(file_paths, results):
+        if keys_repaired > 0:
+            repaired += 1
+
+        for repair_k, return_code in repair_codes:
+            if return_code not in [0, 1]:
+                with_errors += 1
+                print(f"File: {file}.\n\t Result: {repair_codes}")
+                break
+
+    print(f"\n\nScanned: {no_files}\nRepaired: {repaired}\nWith errors: {with_errors}")
+
+
+
 
 
 
