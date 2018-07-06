@@ -91,6 +91,10 @@ def fix_data(data: Dict):
 
     data["task_name"] = get_task_name(data)
 
+    # Fix values
+    if data["args"]["train"]["stop_if_not_better"] is False:
+        data["args"]["train"]["stop_if_not_better"] = 0
+
     return data
 
 
@@ -127,9 +131,11 @@ def upload_eData_to_elastic(args):
             print(f"[_{p_idx}_] " +
                   f"[ERROR] Already found item in database (by timestamp): {file_path}")
 
-            for h in res["hits"]["hits"]:
+            for h in res:
+                # Check if same title
                 title = h["_source"]["args"]["title"]
-                if title == data["args"]["title"]:
+                run_id = h["_source"]["args"]["run_id"]
+                if title == data["args"]["title"] and run_id == data["args"]["run_id"]:
                     match = h
 
             if match is None:
