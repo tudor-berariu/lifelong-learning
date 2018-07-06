@@ -18,12 +18,21 @@ class MLP(nn.Module):
 
         self.__use_softmax: bool = cfg.use_softmax
         hidden_units: List[int] = cfg.hidden_units
+        use_bn = getattr(cfg, "batch_norm", False)
         activation = getattr(nn, cfg.activation)
 
         in_units = reduce(mul, in_size, 1)
         hidden_layers = []
+
+        if use_bn:
+            ln_bias = False
+        else:
+            ln_bias = True
+
         for hidden_size in hidden_units:
-            hidden_layers.append(nn.Linear(in_units, hidden_size))
+            hidden_layers.append(nn.Linear(in_units, hidden_size, bias=ln_bias))
+            if use_bn:
+                hidden_layers.append(nn.BatchNorm1d(hidden_size))
             hidden_layers.append(activation())
             in_units = hidden_size
 
