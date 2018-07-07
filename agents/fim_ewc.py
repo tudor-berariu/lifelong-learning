@@ -28,6 +28,8 @@ class FIMEWC(BaseAgent):
         self.scale = agent_args.scale
         self.samples_no = agent_args.samples_no
         self.empirical = agent_args.empirical
+        if self.empirical:
+            self.only_correct = agent_args.only_correct
         self.verbose = agent_args.verbose
 
         self.saved_tasks_no = 0
@@ -102,10 +104,16 @@ class FIMEWC(BaseAgent):
 
             if empirical:
                 outdx = targets[0].unsqueeze(1)
+                if self.only_correct:
+                    predictions = logits.argmax(dim=1).detach()
+                    mask = (predictions == targets[0])
             else:
                 outdx = Categorical(logits=logits).sample().unsqueeze(1).detach()
             samples = logits.gather(1, outdx)
-            idx, batch_size = 0, data.size(0)
+            if empirical and self.only_correct:
+                samples = samples.squeeze(1)[mask]
+            idx, batch_size = 0, samples.size(0)
+            
             while idx < batch_size and (samples_no is None or seen_no < samples_no):
                 model.zero_grad()
                 torch.autograd.backward(samples[idx], retain_graph=True)
@@ -116,11 +124,13 @@ class FIMEWC(BaseAgent):
                 seen_no += 1
                 idx += 1
 
-            if verbose and seen_no % 100 == 0:
-                toc = time.time()
-                fps = float(seen_no - last) / (toc - tic)
-                tic, last = toc, seen_no
-                sys.stdout.write(f"\rSamples: {seen_no:5d}. Fps: {fps:2.4f} samples/s.")
+                if verbose and seen_no % 1000 == 0:
+                    toc = time.time()
+                    fps = float(seen_no - last) / (toc - tic)
+                    tic, last = toc, seen_no
+                    sys.stdout.write(f"\rSamples: {seen_no:5d}."
+                                     f" Fps: {fps:2.4f} samples/s."
+                                     f" Batch size: {batch_size:d}.")
 
         if verbose:
             if seen_no > last:
