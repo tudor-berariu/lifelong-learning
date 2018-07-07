@@ -7,10 +7,12 @@ ALL_AGENTS = {
     # "<config_name>": ("<module_name>", "<class_name>")
     "baseline": ("base_agent", "BaseAgent"),
     "ewc": ("ewc", "EWC"),
+    "fim_ewc": ("fim_ewc", "FIMEWC"),
     "full_approx": ("full_approx", "FullApprox"),
     "seq_laplace": ("sequential_laplace_approximation", "SequentialLaplaceApproximation"),
     "andrei_test": ("andrei_test", "AndreiTest"),
-    "sparse_kf": ("sparse_laplace_kfc", "SparseKFLaplace")
+    "sparse_kf": ("sparse_laplace_kfc", "SparseKFLaplace"),
+    "test_constraint_importance": ("test_constraint_importance", "TestConstraintImportance"),
 }
 
 

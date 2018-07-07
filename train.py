@@ -1,14 +1,12 @@
-import sys
 import os
 from argparse import Namespace
 import torch
 import torch.optim as optim
 from typing import Type, Tuple
 from shutil import rmtree
-import importlib
 
 
-from liftoff.config import value_of, namespace_to_dict
+from liftoff.config import namespace_to_dict
 from liftoff.config import read_config
 
 from models import get_model
@@ -16,7 +14,66 @@ from my_types import Args
 from multi_task import MultiTask
 
 
+""" Define possible train modes """
+
+
+def train_sim(init_model, get_optim, multitask, args):
+    """ Train on datasets simultanously """
+    import train_simultaneously
+    train_simultaneously.train_simultaneously(init_model, get_optim, multitask, args)
+
+
+def train_ind(init_model, get_optim, multitask, args):
+    """ Train each dataset separately  """
+    import train_individually
+    train_individually.train_individually(init_model, get_optim, multitask, args)
+
+
+def train_seq(init_model, get_optim, multitask, args):
+    """ Train sequentially """
+    from agents import get_agent
+    agent_class = get_agent(args.lifelong.mode)
+    agent = agent_class(init_model, get_optim, multitask, args)
+    agent.train_sequentially()
+
+
+def train_template(init_model, get_optim, multitask, args):
+    """
+        Train using script from folder with name args.mode.
+        Method with the same name will be called.
+    """
+    package_name = "train_scripts"
+
+    import glob
+    import importlib
+
+    module_name = args.mode
+
+    # Get list of local modules
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    py_files = glob.glob(f"{dir_path}/{package_name}/*.py")
+    py_module = [os.path.splitext(os.path.basename(x))[0] for x in py_files]
+
+    # Import module
+    assert module_name in py_module, f"No module with this name: {module_name}"
+    module = importlib.import_module(f"{package_name}.{module_name}")
+
+    # Get function
+    assert hasattr(module, module_name), f"Module {module_name} has no function {module_name}"
+    method = getattr(module, module_name)
+
+    method(init_model, get_optim, multitask, args)
+
+
+MODE = {
+    "sim": train_sim,
+    "ind": train_ind,
+    "seq": train_seq
+}
+
+
 def get_optimizer(args: Args) -> Tuple[Type, dict]:
+    """ Get optimizer with configuration from given namespace """
     kwargs = args._optimizer.optimizer_args
     kwargs = namespace_to_dict(kwargs)
     return optim.__dict__[args._optimizer.name], kwargs
@@ -26,6 +83,7 @@ def run(args: Args, multitask: MultiTask = None) -> None:
     print(torch.__version__)
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
+    torch.backends.cudnn.benchmark = True
 
     args.device = device = "cuda:0" if args.cuda else "cpu"
     for key, value in args.__dict__.items():
@@ -54,19 +112,12 @@ def run(args: Args, multitask: MultiTask = None) -> None:
     if not os.path.isdir(args.out_dir):
         os.mkdir(args.out_dir)
 
-    if args.mode == "sim":
-        import train_simultaneously
-        train_simultaneously.train_simultaneously(init_model, get_optim, multitask, args)
-    elif args.mode == "ind":
-        import train_individually
-        train_individually.train_individually(init_model, get_optim, multitask, args)
-    elif args.mode == "seq":
-        from agents import get_agent
-        agent_class = get_agent(args.lifelong.mode)
-        agent = agent_class(init_model, get_optim, multitask, args)
-        agent.train_sequentially()
+    # -- Run actual training script
+    if args.mode in MODE.keys():
+        MODE[args.mode](init_model, get_optim, multitask, args)
     else:
-        raise ValueError
+        # Fallback to template search in local folder
+        train_template(init_model, get_optim, multitask, args)
 
 
 def main(args: Args):
