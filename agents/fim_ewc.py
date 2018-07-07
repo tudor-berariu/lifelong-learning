@@ -96,9 +96,9 @@ class FIMEWC(BaseAgent):
                 train_iterator = iter(train_loader)
                 (data, targets, head_idx) = next(train_iterator)
 
-            logits = model(data, head_idx=head_idx)
-            assert isinstance(logits, list) and len(logits) == 1
-            logits = functional.log_softmax(logits[0], dim=1)
+            outputs = model(data, head_idx=head_idx)
+            assert isinstance(outputs, list) and len(outputs) == 1
+            logits = functional.log_softmax(outputs[0], dim=1)
 
             if empirical:
                 outdx = targets[0].unsqueeze(1)
