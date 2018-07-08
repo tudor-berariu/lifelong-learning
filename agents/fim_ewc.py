@@ -24,6 +24,7 @@ class FIMEWC(BaseAgent):
         args = self._args
         agent_args = args.lifelong
         self.merge_elasticities = agent_args.merge_elasticities
+        self.first_task_only = False
 
         self.scale = agent_args.scale
         self.samples_no = agent_args.samples_no
@@ -89,11 +90,11 @@ class FIMEWC(BaseAgent):
         tic = time.time()
 
         train_iterator = iter(train_loader)
-        while samples_no is None or seen_no < samples_no:
+        while not samples_no or seen_no < samples_no:
             try:
                 (data, targets, head_idx) = next(train_iterator)
             except StopIteration:
-                if samples_no is None:
+                if not samples_no:
                     break
                 train_iterator = iter(train_loader)
                 (data, targets, head_idx) = next(train_iterator)
@@ -114,7 +115,7 @@ class FIMEWC(BaseAgent):
                 samples = samples.squeeze(1)[mask]
             idx, batch_size = 0, samples.size(0)
             
-            while idx < batch_size and (samples_no is None or seen_no < samples_no):
+            while idx < batch_size and (not samples_no or seen_no < samples_no):
                 model.zero_grad()
                 torch.autograd.backward(samples[idx], retain_graph=True)
                 for name, param in model.named_parameters():
