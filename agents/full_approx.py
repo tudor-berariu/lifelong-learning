@@ -26,7 +26,7 @@ class FullApprox(BaseAgent):
         self.scale = agent_args.scale
         self.saved_tasks_no = 0
 
-        self.constraints: List[Constraint] = []
+        self.constraints: List[FullConstraint] = []
 
     def _train_task_batch(self, batch_idx: int, data: Tensor, targets: List[Tensor],
                           head_idx: Union[int, Tensor])-> Tuple[List[Tensor], Tensor, Dict]:
