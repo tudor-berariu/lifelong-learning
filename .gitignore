@@ -1,6 +1,7 @@
 nohup.out
 results/
 xdata/
+plots/
 
 # Experiment configuration
 
