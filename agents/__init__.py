@@ -2,7 +2,6 @@ import importlib
 from typing import Type, List
 
 from .base_agent import BaseAgent
-from .base_agent_wrappers import add_base_wrappers
 
 ALL_AGENTS = {
     # "<config_name>": ("<module_name>", "<class_name>")
@@ -16,7 +15,22 @@ ALL_AGENTS = {
     "sparse_kf": ("sparse_laplace_kfc", "SparseKFLaplace"),
     "test_constraint_importance": ("test_constraint_importance", "TestConstraintImportance"),
     "task_dependent_unit": ("task_dependent_unit", "TaskDependentUnitEWC"),
+    "sparsity": ("sparsity", "Sparsity"),
 }
+
+
+def add_base_wrappers(wrappers: List[str], start_base: Type) -> Type:
+    # @wrappers         : list of name of wrappers
+
+    for wrapper_name in reversed(wrappers):
+        print(f"Add wrapper: {wrapper}")
+
+        wrapper = get_agent(wrapper_name)
+
+        wrapper.__bases__ = start_base
+        start_base = (wrapper, )
+
+    return start_base
 
 
 def get_agent(name: str, base_wrappers: List[str] = list()) -> Type:
