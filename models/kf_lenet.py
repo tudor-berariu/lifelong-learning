@@ -78,7 +78,7 @@ class KFLeNet(KFACModule):
         for module in self.fc_modules:
             x = module(x)
 
-        assert not self.do_kf or isinstance(head_idx, int)  # kf -> single head
+        assert not self.kf_mode or isinstance(head_idx, int)  # kf -> single head
 
         results = []  # type: List[Tensor]
         if isinstance(head_idx, int):

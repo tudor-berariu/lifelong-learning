@@ -12,6 +12,7 @@ from termcolor import colored as clr
 from .base_agent import BaseAgent
 from models.kfac import GaussianPrior
 
+
 class KFAgent(BaseAgent):
     def __init__(self, *args, **kwargs):
         super(KFAgent, self).__init__(*args, **kwargs)
@@ -53,14 +54,8 @@ class KFAgent(BaseAgent):
         loss_per_layer = dict({})
         if task_no > 0:
             for _idx, constraint in enumerate(self.constraints):
-                for name, param in model.named_parameters():
-                    if param.grad is not None and name in constraint.elasticity:
-                        loss_name = "loss_" + name
-                        layer_loss = torch.dot(constraint.elasticity[name],
-                                               (constraint.mode[name] - param.view(-1)).pow(2))
-                        loss_per_layer[loss_name] = layer_loss.item() + \
-                            loss_per_layer.get(loss_name, 0)
-                        total_elastic_loss += layer_loss
+                crt_params = {name: param for (name, param) in model.named_parameters()}
+                total_elastic_loss += constraint(crt_params)
 
             loss += total_elastic_loss * self.scale
             loss_per_layer["loss_ewc"] = total_elastic_loss.item()
