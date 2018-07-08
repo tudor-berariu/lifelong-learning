@@ -1,0 +1,73 @@
+title: "andrei"
+no_cuda: no
+mode: "sim"
+keep_alive: no
+
+tasks:
+  datasets: ["cifar10", "fashion", "mnist"]
+  in_size: [3, 32, 32]
+  reset_targets: False
+  validation: 0
+  split: 1
+  perms_no: 1
+  permute_targets: no
+  common_head: yes
+
+model:
+  name: mlp
+  activation: &act "ELU"
+  _conv: [["Conv2d", -1, 20, 5], ["MaxPool2d", 2], [*act,],
+          ["Conv2d", 20, 50, 5], ["MaxPool2d", 2], [*act,]]
+  hidden_units: [10, 10, 10, 10, 10, 10, 10, 10, 10, 10]
+  batch_norm: True
+  use_softmax: no
+
+lifelong:
+  mode: fim_ewc
+  scale: 30
+  merge_elasticities: False
+  first_task_only: False
+  samples_no: 1000
+  empirical: True
+  only_correct: False
+
+  alpha: 0.25
+  g_norm: 2
+  is_signed: False
+  drop_misclassified: False
+  loss_norm: 2
+  do_sample: False
+  signed_on_cpu: True
+  verbose: True
+
+train:
+  batch_size: 1024
+  shuffle: True
+  epochs_per_task: 20
+  max_nan_loss: 5
+  stop_if_not_better: 0
+  test_batch_size: 0
+  _optimizer:
+    name: Adam
+    optimizer_args: { lr: 0.001 }
+
+reporting:
+  min_save: yes
+  eval_freq: 1
+  eval_not_trained: yes
+  save_report_freq: 5
+  save_report_trace: yes
+  epoch_report_freq: 1
+
+  batch_train_save_freq: 0
+  batch_train_show_freq: 0
+  batch_eval_save_freq: 0
+  batch_eval_show_freq: 0
+
+  plot_tensorboard: no
+  tensorboard_auto_start: no
+  plot_comet: no
+  comet_plot_freq_factor: 0.1
+
+  push_to_server: no
+  generate_edata: no
