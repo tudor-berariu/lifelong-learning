@@ -1,7 +1,8 @@
 import importlib
-from typing import Type
+from typing import Type, List
 
 from .base_agent import BaseAgent
+from .base_agent_wrappers import add_base_wrappers
 
 ALL_AGENTS = {
     # "<config_name>": ("<module_name>", "<class_name>")
@@ -17,12 +18,16 @@ ALL_AGENTS = {
 }
 
 
-def get_agent(name) -> Type:
+def get_agent(name: str, base_wrappers: List[str] = list()) -> Type:
     # @name         : name of agent
+    # @wrappers         : list of name of wrappers
 
     assert name in ALL_AGENTS, "Agent %s is not on defined." % name
 
     module = importlib.import_module("agents." + ALL_AGENTS[name][0])
     agent = getattr(module, ALL_AGENTS[name][1])
+
+    if len(base_wrappers) > 0:
+        agent.__bases__ = add_base_wrappers(base_wrappers, agent.__bases__)
 
     return agent

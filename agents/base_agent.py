@@ -287,6 +287,9 @@ class BaseAgent(object):
         for out, t in zip(outputs, targets):
             loss += functional.cross_entropy(out, t)
 
+        for extra_loss in self._train_task_batch_extra_losses():
+            loss += extra_loss
+
         loss.backward()
         self._optimizer.step()
 
@@ -381,6 +384,9 @@ class BaseAgent(object):
 
     def _start_train_task_batch(self):
         pass
+
+    def _train_task_batch_extra_losses(self, *args, **kwargs)-> List[torch.Tensor]:
+        return list()
 
     def _end_train_task_batch(self, outputs: Tuple[List[Tensor]], loss: Tensor, info: Dict):
         self._register_train_task_batch_loss(loss, info)

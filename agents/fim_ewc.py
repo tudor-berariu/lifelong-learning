@@ -48,6 +48,9 @@ class FIMEWC(BaseAgent):
         for out, target in zip(outputs, targets):
             loss += functional.cross_entropy(out, target)
 
+        for extra_loss in self._train_task_batch_extra_losses():
+            loss += extra_loss
+
         total_elastic_loss = torch.tensor(0., device=self.device)
         loss_per_layer = dict({})
         if task_no > 0:
@@ -70,6 +73,7 @@ class FIMEWC(BaseAgent):
         return outputs, loss, loss_per_layer
 
     def _end_train_task(self):
+        super(FIMEWC, self)._end_train_task()
 
         if self.crt_task_idx > 1 and self.first_task_only:
             return
