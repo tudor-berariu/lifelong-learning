@@ -8,10 +8,10 @@ import torch.nn as nn
 import torch.nn.functional as functional
 from torch.nn import Module
 
-from models.kf import KroneckerFactored
+from models.kfac import KFACModule
 
 
-class KFMLP(KroneckerFactored):
+class KFMLP(KFACModule):
 
     def __init__(self, cfg,
                  in_size: torch.Size,

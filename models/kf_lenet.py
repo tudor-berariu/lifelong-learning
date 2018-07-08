@@ -7,10 +7,10 @@ import torch.nn.functional as functional
 from torch import Tensor
 from torch.nn import Module
 
-from models.kf import KroneckerFactored
+from models.kfac import KFACModule
 
 
-class KFLeNet(KroneckerFactored):
+class KFLeNet(KFACModule):
 
     def __init__(self, cfg,
                  in_size: torch.Size,
