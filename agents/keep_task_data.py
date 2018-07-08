@@ -6,6 +6,7 @@ from termcolor import colored as clr
 
 # Project imports
 from .base_agent import BaseAgent
+from .ewc import EWC
 
 Constraint = NamedTuple("Constraint", [("task_idx", int),
                                        ("epoch", int),
@@ -13,19 +14,14 @@ Constraint = NamedTuple("Constraint", [("task_idx", int),
                                        ("elasticity", Dict[str, Tensor])])
 
 
-class EWC(BaseAgent):
+class KeepTaskData(EWC):
     def __init__(self, *args, **kwargs):
         super(EWC, self).__init__(*args, **kwargs)
 
         args = self._args
         agent_args = args.lifelong
-        self.merge_elasticities = agent_args.merge_elasticities
-
-        self.first_task_only = agent_args.first_task_only
-        self.scale = agent_args.scale
-        self.saved_tasks_no = 0
-
-        self.constraints: List[Constraint] = []
+        self.keep_cnt = agent_args.keep_cnt
+        self.keep_train_sample = agent_args.keep_train_sample
 
     def _train_task_batch(self, batch_idx: int, data: Tensor, targets: List[Tensor],
                           head_idx: Union[int, Tensor])-> Tuple[List[Tensor], Tensor, Dict]:
@@ -36,9 +32,32 @@ class EWC(BaseAgent):
         task_no = self.crt_task_idx
 
         loss = torch.tensor(0., device=self.device)
-
         for out, target in zip(outputs, targets):
             loss += functional.cross_entropy(out, target)
+
+        # ==========================================================================================
+        # -- FWD on data on older tasks
+        older_tasks = 0
+        sample_cnt = self.keep_train_sample
+        for data_loader in enumerate(self.train_tasks):
+            if older_tasks >= task_no or sample_cnt <= 0:
+                break
+
+            for o_batch_idx, (o_data, o_targets, o_head_idx) in enumerate(data_loader):
+                o_data = o_data[:sample_cnt]
+                o_targets = o_targets[:sample_cnt]
+                if not isinstance(o_head_idx, int):
+                    o_head_idx = o_head_idx[:sample_cnt]
+                o_outputs = model(o_data, head_idx=o_head_idx)
+                for o_out, o_target in zip(o_outputs, o_targets):
+                    loss += functional.cross_entropy(o_out, o_target)
+                sample_cnt -= o_data.size(0)
+
+                if sample_cnt <= 0:
+                    break
+
+            older_tasks += 1
+        # ==========================================================================================
 
         total_elastic_loss = torch.tensor(0., device=self.device)
         loss_per_layer = dict({})
@@ -60,45 +79,3 @@ class EWC(BaseAgent):
         self._optimizer.step()
 
         return outputs, loss, loss_per_layer
-
-    def _end_train_task(self):
-        if self.crt_task_idx >= 1 and self.first_task_only:
-            return
-
-        train_loader, _ = self.crt_data_loaders
-        assert hasattr(train_loader, "__len__")
-        self._optimizer.zero_grad()
-        model = self._model
-
-        for _batch_idx, (data, targets, head_idx) in enumerate(train_loader):
-            outputs = model(data, head_idx=head_idx)
-            loss = torch.tensor(0., device=self.device)
-            for output, target in zip(outputs, targets):
-                loss += functional.cross_entropy(output, target)
-            loss.backward()
-
-        grad = dict({})
-        crt_mode = dict({})
-
-        if self.merge_elasticities and self.constraints:
-            # Add to previous matrices if in `merge` mode
-            elasticity = self.constraints[0].elasticity
-        else:
-            elasticity = dict({})
-
-        for name, param in model.named_parameters():
-            if param.grad is not None:
-                crt_mode[name] = param.detach().clone().view(-1)
-                grad[name] = param.grad.detach().pow(2).clone().view(-1)
-                if name in elasticity:
-                    elasticity[name].add_(grad[name]).view(-1)
-                else:
-                    elasticity[name] = grad[name].clone().view(-1)
-
-        new_constraint = Constraint(self.crt_task_idx, self.crt_task_epoch, crt_mode, elasticity)
-        if self.merge_elasticities:
-            # Remove old constraints if in `merge` mode
-            self.constraints.clear()
-        self.constraints.append(new_constraint)
-
-        print(clr(f"There are {len(self.constraints):d} elastic constraints!", attrs=["bold"]))

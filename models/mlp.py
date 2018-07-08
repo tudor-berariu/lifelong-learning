@@ -16,8 +16,10 @@ class MLP(nn.Module):
 
         super(MLP, self).__init__()
 
+        self.cfg = cfg
         self.__use_softmax: bool = cfg.use_softmax
-        hidden_units: List[int] = cfg.hidden_units
+        self.hidden_units = cfg.hidden_units
+        hidden_units: List[int] = self.hidden_units
         use_bn = getattr(cfg, "batch_norm", False)
         activation = getattr(nn, cfg.activation)
 

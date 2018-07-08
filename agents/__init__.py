@@ -13,6 +13,7 @@ ALL_AGENTS = {
     "andrei_test": ("andrei_test", "AndreiTest"),
     "sparse_kf": ("sparse_laplace_kfc", "SparseKFLaplace"),
     "test_constraint_importance": ("test_constraint_importance", "TestConstraintImportance"),
+    "task_dependent_unit": ("task_dependent_unit", "TaskDependentUnitEWC"),
 }
 
 

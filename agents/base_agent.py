@@ -110,7 +110,6 @@ class BaseAgent(object):
         return {}
 
     def train_sequentially(self):
-
         self._start_experiment()  # TEMPLATE
 
         # Load general Classes
