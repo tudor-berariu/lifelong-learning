@@ -43,7 +43,7 @@
 41,0,1,_args.out_dir.<type>
 42,0,1,_args.reporting.batch_eval_save_freq.<type>
 43,0,1,_args.reporting.batch_eval_show_freq.<type>
-44,0,1,_args.reporting.batch_train_save_freq.<type>
+44,1,1,_args.reporting.batch_train_save_freq.<type>
 45,0,1,_args.reporting.batch_train_show_freq.<type>
 46,0,1,_args.reporting.comet_plot_freq_factor.<type>
 47,0,1,_args.reporting.device.<type>
@@ -59,7 +59,7 @@
 57,0,1,_args.reporting.save_report_trace.<type>
 58,0,1,_args.reporting.tensorboard_auto_start.<type>
 59,0,1,_args.resume.<type>
-60,0,1,_args.run_id.<type>
+60,1,1,_args.run_id.<type>
 61,0,1,_args.tasks.common_head.<type>
 62,1,1,_args.tasks.datasets.[type]
 63,0,1,_args.tasks.device.<type>
@@ -77,7 +77,7 @@
 75,0,1,_args.train._optimizer.optimizer_args.lr.<type>
 76,0,1,_args.train._optimizer.optimizer_args.momentum.<type>
 77,0,1,_args.train._optimizer.optimizer_args.nesterov.<type>
-78,0,1,_args.train.batch_size.<type>
+78,1,1,_args.train.batch_size.<type>
 79,0,1,_args.train.device.<type>
 80,0,1,_args.train.epochs_per_task.<type>
 81,0,1,_args.train.max_nan_loss.<type>
