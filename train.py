@@ -32,7 +32,8 @@ def train_ind(init_model, get_optim, multitask, args):
 def train_seq(init_model, get_optim, multitask, args):
     """ Train sequentially """
     from agents import get_agent
-    agent_class = get_agent(args.lifelong.mode)
+    wrappers = getattr(args.lifelong, "wrappers", list())
+    agent_class = get_agent(args.lifelong.mode, base_wrappers=wrappers)
     agent = agent_class(init_model, get_optim, multitask, args)
     agent.train_sequentially()
 

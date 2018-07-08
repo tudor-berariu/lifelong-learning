@@ -1,5 +1,6 @@
 import importlib
 from typing import Type, List
+from termcolor import colored as clr
 
 from .base_agent import BaseAgent
 
@@ -23,7 +24,7 @@ def add_base_wrappers(wrappers: List[str], start_base: Type) -> Type:
     # @wrappers         : list of name of wrappers
 
     for wrapper_name in reversed(wrappers):
-        print(f"Add wrapper: {wrapper}")
+        print(clr(f"Add wrapper:", "yellow"), clr(f"{wrapper_name}", "red"))
 
         wrapper = get_agent(wrapper_name)
 
