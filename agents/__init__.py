@@ -8,6 +8,7 @@ ALL_AGENTS = {
     # "<config_name>": ("<module_name>", "<class_name>")
     "baseline": ("base_agent", "BaseAgent"),
     "ewc": ("ewc", "EWC"),
+    "kf": ("kf_agent", "KFAgent"),
     "fim_ewc": ("fim_ewc", "FIMEWC"),
     "full_approx": ("full_approx", "FullApprox"),
     "seq_laplace": ("sequential_laplace_approximation", "SequentialLaplaceApproximation"),

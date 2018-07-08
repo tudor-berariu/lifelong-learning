@@ -25,7 +25,6 @@ class FIMEWC(BaseAgent):
         agent_args = args.lifelong
         self.merge_elasticities = agent_args.merge_elasticities
         self.first_task_only = False
-
         self.scale = agent_args.scale
         self.samples_no = agent_args.samples_no
         self.empirical = agent_args.empirical

@@ -1,0 +1,71 @@
+title: "KFAC"
+no_cuda: no
+mode: "seq"
+keep_alive: no
+
+tasks:
+  datasets: ["cifar10", "fashion", "mnist"]
+  in_size: [3, 32, 32]
+  reset_targets: False
+  validation: 0
+  split: 1
+  perms_no: 1
+  permute_targets: no
+  common_head: yes
+
+model:
+  name: kf_lenet
+  activation: &act "ReLU"
+  _conv: [["Conv2d", -1, 20, 5], ["MaxPool2d", 2], [*act,],
+          ["Conv2d", 20, 50, 5], ["MaxPool2d", 2], [*act,]]
+  hidden_units: [100, 100]
+  use_softmax: no
+
+lifelong:
+  mode: kf
+  scale: 400
+  merge_elasticities: False
+  samples_no: 10000
+  use_batches: True
+  empirical: False
+  verbose: True
+  average_factors: True
+  only_correct: False
+  tridiag: False
+
+
+train:
+  batch_size: 128
+  shuffle: True
+  epochs_per_task: 1
+  max_nan_loss: 5
+  stop_if_not_better: 5
+  early_stop: 10
+  test_batch_size: 0
+  _optimizer:
+    name: Adam
+    optimizer_args: { lr: 0.001 }
+    lr_decay:
+      gamma: 0.1
+      step: 100
+
+reporting:
+  min_save: yes
+  eval_freq: 1
+  eval_not_trained: yes
+  save_report_freq: 5
+  save_report_trace: yes
+  epoch_report_freq: 1
+  
+  batch_train_save_freq: 0
+  batch_train_show_freq: 0
+  batch_eval_save_freq: 0
+  batch_eval_show_freq: 0
+
+  plot_tensorboard: yes
+  tensorboard_auto_start: yes
+  plot_comet: no
+  comet_plot_freq_factor: 0.1
+
+  push_to_server: no
+  generate_edata: no

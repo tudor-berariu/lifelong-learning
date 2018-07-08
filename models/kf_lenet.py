@@ -7,10 +7,10 @@ import torch.nn.functional as functional
 from torch import Tensor
 from torch.nn import Module
 
-from models.kf import KroneckerFactored
+from models.kfac import KFACModule
 
 
-class KFLeNet(KroneckerFactored):
+class KFLeNet(KFACModule):
 
     def __init__(self, cfg,
                  in_size: torch.Size,
@@ -78,7 +78,7 @@ class KFLeNet(KroneckerFactored):
         for module in self.fc_modules:
             x = module(x)
 
-        assert not self.do_kf or isinstance(head_idx, int)  # kf -> single head
+        assert not self.kf_mode or isinstance(head_idx, int)  # kf -> single head
 
         results = []  # type: List[Tensor]
         if isinstance(head_idx, int):
